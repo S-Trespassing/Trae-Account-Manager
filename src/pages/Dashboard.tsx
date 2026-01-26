@@ -21,30 +21,124 @@ export function Dashboard({ accounts, hasLoaded = true }: DashboardProps) {
   const [loadingStats, setLoadingStats] = useState(false);
   const [statsError, setStatsError] = useState<string | null>(null);
 
-  const currentAccount = accounts.find(a => a.is_current) || accounts[0];
+  const statsCacheKey = (accountId: string) => `trae_user_stats_${accountId}`;
+  const loadStatsCache = (accountId: string) => {
+    try {
+      const raw = localStorage.getItem(statsCacheKey(accountId));
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.data) return parsed.data as UserStatisticData;
+      if (parsed && parsed.UserID) return parsed as UserStatisticData;
+    } catch {
+      return null;
+    }
+    return null;
+  };
+  const aggregateStats = (statsList: UserStatisticData[]): UserStatisticData => {
+    const merged: UserStatisticData = {
+      UserID: "ALL",
+      RegisterDays: 0,
+      AiCnt365d: {},
+      CodeAiAcceptCnt7d: 0,
+      CodeAiAcceptDiffLanguageCnt7d: {},
+      CodeCompCnt7d: 0,
+      CodeCompDiffAgentCnt7d: {},
+      CodeCompDiffModelCnt7d: {},
+      IdeActiveDiffHourCnt7d: {},
+      DataDate: "",
+      IsIde: false
+    };
+    for (const stats of statsList) {
+      if (!stats) continue;
+      merged.RegisterDays = Math.max(merged.RegisterDays, stats.RegisterDays || 0);
+      merged.CodeAiAcceptCnt7d += stats.CodeAiAcceptCnt7d || 0;
+      merged.CodeCompCnt7d += stats.CodeCompCnt7d || 0;
+      merged.IsIde = merged.IsIde || !!stats.IsIde;
+      if (stats.DataDate && stats.DataDate > merged.DataDate) {
+        merged.DataDate = stats.DataDate;
+      }
+      const mergeMap = (target: Record<string, number>, source?: Record<string, number>) => {
+        if (!source) return;
+        Object.entries(source).forEach(([key, value]) => {
+          target[key] = (target[key] || 0) + (value || 0);
+        });
+      };
+      mergeMap(merged.AiCnt365d, stats.AiCnt365d);
+      mergeMap(merged.CodeAiAcceptDiffLanguageCnt7d, stats.CodeAiAcceptDiffLanguageCnt7d);
+      mergeMap(merged.CodeCompDiffAgentCnt7d, stats.CodeCompDiffAgentCnt7d);
+      mergeMap(merged.CodeCompDiffModelCnt7d, stats.CodeCompDiffModelCnt7d);
+      mergeMap(merged.IdeActiveDiffHourCnt7d, stats.IdeActiveDiffHourCnt7d);
+    }
+    return merged;
+  };
+  const saveStatsCache = (accountId: string, data: UserStatisticData) => {
+    try {
+      localStorage.setItem(statsCacheKey(accountId), JSON.stringify({
+        data,
+        cachedAt: new Date().toISOString()
+      }));
+    } catch {
+      // ignore cache write errors
+    }
+  };
 
   useEffect(() => {
-    async function fetchStats() {
-      if (!currentAccount) {
-        setUserStats(null);
-        return;
-      }
+    let cancelled = false;
+    if (!accounts.length) {
+      setUserStats(null);
+      setLoadingStats(false);
+      setStatsError(null);
+      return;
+    }
+    const cachedStats = accounts
+      .map(account => loadStatsCache(account.id))
+      .filter(Boolean) as UserStatisticData[];
+    if (cachedStats.length > 0) {
+      setUserStats(aggregateStats(cachedStats));
+      setLoadingStats(false);
+      setStatsError(null);
+    } else {
+      setUserStats(null);
       setLoadingStats(true);
       setStatsError(null);
-      try {
-        console.log("Fetching stats for account:", currentAccount.id);
-        const stats = await api.getUserStatistics(currentAccount.id);
-        console.log("Stats received:", stats);
-        setUserStats(stats);
-      } catch (e: any) {
-        console.error("Failed to fetch user stats", e);
-        setStatsError(e.message || "获取统计数据失败");
-      } finally {
-        setLoadingStats(false);
-      }
     }
-    fetchStats();
-  }, [currentAccount?.id]);
+    (async () => {
+      try {
+        const results = await Promise.allSettled(
+          accounts.map(async (account) => {
+            console.log("Fetching stats for account:", account.id);
+            const stats = await api.getUserStatistics(account.id);
+            saveStatsCache(account.id, stats);
+            return stats;
+          })
+        );
+        if (cancelled) return;
+        const freshStats = results
+          .filter((res): res is PromiseFulfilledResult<UserStatisticData> => res.status === "fulfilled")
+          .map(res => res.value);
+        const fallbackStats = cachedStats.length > 0 ? cachedStats : [];
+        const mergedList = freshStats.length > 0 ? freshStats : fallbackStats;
+        if (mergedList.length > 0) {
+          setUserStats(aggregateStats(mergedList));
+          setStatsError(null);
+        } else {
+          setStatsError("获取统计数据失败");
+        }
+      } catch (e: any) {
+        if (cancelled) return;
+        if (!cachedStats.length) {
+          setStatsError(e.message || "获取统计数据失败");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingStats(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [accounts.map(a => a.id).join("|")]);
 
   const totalAccounts = accounts.length;
   const activeAccounts = accounts.filter(a => a.usage && a.usage.fast_request_left > 0).length;
@@ -176,7 +270,7 @@ export function Dashboard({ accounts, hasLoaded = true }: DashboardProps) {
         </div>
       )}
 
-      {statsError && (
+      {statsError && !userStats && (
         <div className="dashboard-widgets-section error-placeholder" style={{ marginBottom: '24px', textAlign: 'center', padding: '20px', background: 'var(--danger-bg)', borderRadius: '16px', color: 'var(--danger)' }}>
           <p>⚠️ {statsError}</p>
           <button 
@@ -273,43 +367,7 @@ export function Dashboard({ accounts, hasLoaded = true }: DashboardProps) {
         <>
           <UsageEvents accountId={accounts.find(a => a.is_current)?.id || accounts[0]?.id || ''} />
 
-          <div className="accounts-preview">
-            <div className="preview-header">
-              <h3>账号概览</h3>
-              <span className="preview-count">{accounts.length} 个账号</span>
-            </div>
-            <div className="preview-list">
-              {accounts.slice(0, 4).map((account) => {
-                const used = account.usage ? account.usage.fast_request_used + account.usage.extra_fast_request_used : 0;
-                const limit = account.usage ? account.usage.fast_request_limit + account.usage.extra_fast_request_limit : 0;
-                const percent = limit > 0 ? Math.round((used / limit) * 100) : 0;
 
-                return (
-                  <div key={account.id} className="preview-item">
-                    <div className="preview-avatar">
-                      {(account.email || account.name || '?').charAt(0).toUpperCase()}
-                    </div>
-                    <div className="preview-info">
-                      <span className="preview-name">{account.email || account.name || 'Unknown'}</span>
-                      <span className="preview-plan">{account.usage?.plan_type || 'Free'}</span>
-                    </div>
-                    <div className="preview-usage">
-                      <div className="preview-progress">
-                        <div
-                          className="preview-progress-fill"
-                          style={{
-                            width: `${percent}%`,
-                            background: percent > 80 ? '#ef4444' : percent > 50 ? '#f59e0b' : '#10b981'
-                          }}
-                        />
-                      </div>
-                      <span className="preview-percent">{percent}%</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
         </>
       )}
 

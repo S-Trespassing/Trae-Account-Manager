@@ -74,28 +74,28 @@
 
 /* Themes */
 [data-theme='dark'] {
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-card: #1e293b;
-  --bg-hover: #334155;
-  --bg-active: #312e81;
-  --bg-input: #020617;
-  --text-primary: #f8fafc;
-  --text-secondary: #e2e8f0;
-  --text-muted: #94a3b8;
+  --bg-primary: #0A0B0D; /* Detected from Trae */
+  --bg-secondary: #16171A; /* Slightly lighter for cards/sidebar */
+  --bg-card: rgba(255, 255, 255, 0.03); /* Trae's card style */
+  --bg-hover: #232428;
+  --bg-active: #2C2D31;
+  --bg-input: #0F1012;
+  --text-primary: #F5F9FE; /* Detected color */
+  --text-secondary: #A1A1AA;
+  --text-muted: #71717A;
   --text-inverse: #ffffff;
-  --border: #334155;
-  --border-light: #1e293b;
-  --border-focus: #818cf8;
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
-  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.2);
-  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
-  --shadow-hover: 0 10px 40px rgba(0, 0, 0, 0.4);
+  --border: rgba(255, 255, 255, 0.12); /* Detected border */
+  --border-light: #1F2023;
+  --border-focus: #6366F1;
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-hover: none;
   --accent-bg: rgba(99, 102, 241, 0.15);
-  --gradient-card: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
-  --glass-bg: rgba(30, 41, 59, 0.7);
+  --gradient-card: linear-gradient(145deg, #16171A 0%, #0A0B0D 100%);
+  --glass-bg: rgba(22, 23, 26, 0.7);
 }
 
 [data-theme='purple'] {
@@ -261,7 +261,7 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
   background: var(--bg-primary);
   color: var(--text-primary);
   min-height: 100vh;
@@ -2039,113 +2039,7 @@ body {
   font-size: 12px;
 }
 
-/* Accounts Preview */
-.accounts-preview {
-  background: var(--bg-card);
-  border-radius: 16px;
-  padding: 20px;
-  box-shadow: var(--shadow);
-}
 
-.preview-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.preview-header h3 {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.preview-count {
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.preview-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 12px;
-}
-
-.preview-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  background: var(--bg-input);
-  border-radius: 12px;
-  transition: all 0.2s;
-}
-
-.preview-item:hover {
-  background: var(--bg-hover);
-}
-
-.preview-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--gradient-accent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  font-size: 16px;
-  color: var(--text-inverse);
-  flex-shrink: 0;
-}
-
-.preview-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.preview-name {
-  display: block;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.preview-plan {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.preview-usage {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.preview-progress {
-  width: 60px;
-  height: 6px;
-  background: var(--bg-hover);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.preview-progress-fill {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.3s ease;
-}
-
-.preview-percent {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  min-width: 36px;
-  text-align: right;
-}
 
 /* Dashboard Empty */
 .dashboard-empty {
@@ -3642,7 +3536,7 @@ body {
 
 .widget-row-split {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 20px;
 }
 
@@ -3666,45 +3560,55 @@ body {
 
 .widget-card {
   background: var(--bg-card);
-  border-radius: var(--radius-md);
-  padding: 20px;
-  box-shadow: var(--shadow-sm);
-  border: 1px solid var(--border-light);
+  border-radius: 4px; /* Detected from Trae */
+  padding: 18px; /* Detected from Trae */
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
   height: 100%;
   display: flex;
   flex-direction: column;
+  transition: transform 0.2s, border-color 0.2s;
+}
+
+.widget-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.3); /* Subtle highlight */
 }
 
 .widget-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .widget-header h3 {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 400; /* Detected weight */
   color: var(--text-primary);
   margin: 0;
+  letter-spacing: -0.01em;
 }
 
 .info-icon {
-  font-size: 14px;
+  font-size: 16px;
   color: var(--text-muted);
   cursor: help;
-  opacity: 0.6;
+  opacity: 0.5;
+  transition: opacity 0.2s;
 }
 
 .info-icon:hover {
   opacity: 1;
+  color: var(--text-primary);
 }
 
 .widget-stat-big {
-  font-size: 32px;
+  font-size: 36px;
   font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 4px;
+  margin-bottom: 8px;
+  letter-spacing: -0.02em;
 }
 
 .widget-subtext {
@@ -3718,8 +3622,86 @@ body {
 
 /* Heatmap */
 .heatmap-container {
-  overflow-x: auto;
+  overflow-x: hidden;
   padding-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.heatmap-months {
+  position: relative;
+  height: 20px;
+  width: 100%;
+  margin-left: 20px; /* Space for weekday labels */
+  margin-bottom: 4px;
+}
+
+.heatmap-month-label {
+  position: absolute;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.heatmap-body {
+  display: flex;
+  gap: 8px;
+}
+
+.heatmap-weekdays {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding-top: 14px; /* Align with cells (assuming 2nd, 4th, 6th rows) */
+  font-size: 10px;
+  color: var(--text-muted);
+  height: 98px; /* 7 cells * 14px - gap */
+  line-height: 14px;
+}
+
+.heatmap-weekdays span {
+  height: 14px; /* Match cell height + gap roughly */
+  display: flex;
+  align-items: center;
+}
+
+/* Specific positioning for M, W, F */
+.heatmap-weekdays span:nth-child(1) { margin-top: 14px; } /* Mon is 2nd row (index 1) */
+.heatmap-weekdays span:nth-child(2) { margin-top: 14px; } /* Wed is 4th row (index 3) */
+.heatmap-weekdays span:nth-child(3) { margin-top: 14px; } /* Fri is 6th row (index 5) */
+
+/* Adjust vertical alignment to match cells exactly */
+.heatmap-weekdays {
+  padding-top: 15px; /* Fine tune */
+  gap: 14px; /* 10px cell + 4px gap */
+  justify-content: flex-start;
+}
+
+.heatmap-weekdays span {
+  height: 10px;
+  line-height: 10px;
+  margin: 0 !important; /* Reset margins */
+}
+
+/* 
+  Cells are 10px height + 4px gap.
+  Row 0 (Sun): 0px
+  Row 1 (Mon): 14px -> Label here
+  Row 2 (Tue): 28px
+  Row 3 (Wed): 42px -> Label here
+  Row 4 (Thu): 56px
+  Row 5 (Fri): 70px -> Label here
+  Row 6 (Sat): 84px
+*/
+.heatmap-weekdays span:nth-child(1) { /* Mon */
+  margin-top: 0; 
+}
+.heatmap-weekdays span:nth-child(2) { /* Wed */
+  margin-top: 14px; /* Skip Tue (14px) */
+}
+.heatmap-weekdays span:nth-child(3) { /* Fri */
+  margin-top: 14px; /* Skip Thu (14px) */
 }
 
 .heatmap-grid {
@@ -3733,17 +3715,38 @@ body {
   gap: 4px;
 }
 
+/* Heatmap Gradient Cells */
 .heatmap-cell {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-radius: 2px;
-  background-color: var(--bg-input); /* Default for 0/null */
-  transition: opacity 0.2s;
+  background-color: var(--bg-hover); /* Default empty */
+  transition: all 0.2s;
 }
 
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.legend-cells {
+  display: flex;
+  gap: 4px;
+}
+
+/* Override colors for heatmap using gradients if possible or specific solid colors */
+/* We will control this via inline styles in React, but base style is here */
+
 .heatmap-cell:hover {
-  opacity: 0.8;
-  outline: 1px solid var(--text-primary);
+  transform: scale(1.2);
+  z-index: 10;
+  box-shadow: 0 0 4px rgba(62, 225, 163, 0.5); /* Green glow */
 }
 
 /* Progress Bar */

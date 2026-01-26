@@ -17,16 +17,19 @@ interface DashboardWidgetsProps {
   data: UserStatisticData;
 }
 
-const COLORS = ['#4ade80', '#22c55e', '#16a34a', '#15803d'];
 const BLUE_COLORS = ['#60a5fa', '#3b82f6', '#2563eb', '#1d4ed8'];
 
-// Helper to format date key "YYYYMMDD" to "MMM DD"
-const formatDate = (dateStr: string) => {
-  const year = dateStr.slice(0, 4);
-  const month = dateStr.slice(4, 6);
-  const day = dateStr.slice(6, 8);
-  const date = new Date(Number(year), Number(month) - 1, Number(day));
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+const THEME_COLORS = {
+  tooltipBg: '#16171A',
+  tooltipText: '#F5F9FE',
+  gridStroke: 'rgba(255, 255, 255, 0.1)',
+  textMuted: '#71717A',
+  heatmapEmpty: 'rgba(255, 255, 255, 0.06)',
+  // Trae Gradient Colors (approximated as solid for now, or use gradient in CSS)
+  heatmapLow: '#0e4429', 
+  heatmapMid: '#006d32',
+  heatmapHigh: '#26a641',
+  heatmapMax: '#39d353'
 };
 
 // 1. Active Days Heatmap (Custom Implementation)
@@ -51,56 +54,136 @@ const ActiveDaysWidget: React.FC<{ data: Record<string, number> }> = ({ data }) 
   // Group by weeks for vertical layout (columns are weeks, rows are days)
   const weeks = useMemo(() => {
     const weeksArr = [];
-    let currentWeek: typeof days = [];
     
-    // Align first day to Sunday (or Monday based on preference, using Sunday here)
-    const firstDay = days[0].date.getDay();
-    for (let i = 0; i < firstDay; i++) {
-        currentWeek.push({ date: new Date(), count: -1, key: `empty-${i}` }); // Placeholder
+    // 1. Find the Sunday before (or on) the first date
+    const firstDate = days[0].date;
+    const startDayOfWeek = firstDate.getDay(); // 0=Sun
+    // We need to prepend 'startDayOfWeek' days
+    
+    // 2. Find the Saturday after (or on) the last date
+    const lastDate = days[days.length - 1].date;
+    const endDayOfWeek = lastDate.getDay(); // 6=Sat
+    // We need to append '6 - endDayOfWeek' days
+    
+    // Create a new full list
+    const fullList = [];
+    
+    // Prepend
+    for (let i = startDayOfWeek; i > 0; i--) {
+        const d = new Date(firstDate);
+        d.setDate(d.getDate() - i);
+        fullList.push({ date: d, count: -1, key: `pre-${d.toISOString()}` });
     }
-
-    days.forEach(day => {
-      currentWeek.push(day);
-      if (currentWeek.length === 7) {
-        weeksArr.push(currentWeek);
-        currentWeek = [];
-      }
-    });
-    if (currentWeek.length > 0) {
-      weeksArr.push(currentWeek);
+    
+    // Add data
+    fullList.push(...days);
+    
+    // Append
+    for (let i = 1; i <= 6 - endDayOfWeek; i++) {
+        const d = new Date(lastDate);
+        d.setDate(d.getDate() + i);
+        fullList.push({ date: d, count: -1, key: `post-${d.toISOString()}` });
     }
+    
+    // Chunk into weeks
+    for (let i = 0; i < fullList.length; i += 7) {
+        weeksArr.push(fullList.slice(i, i + 7));
+    }
+    
     return weeksArr;
   }, [days]);
 
+  // Generate Month Labels
+  const monthLabels = useMemo(() => {
+      const labels: { text: string, index: number }[] = [];
+      
+      weeks.forEach((week, index) => {
+          // Label the month if the week contains the 1st day of the month
+          const firstDayOfMonth = week.find(day => day.date.getDate() === 1);
+          if (firstDayOfMonth) {
+              labels.push({ 
+                  text: firstDayOfMonth.date.toLocaleString('default', { month: 'short' }), 
+                  index 
+              });
+          }
+      });
+      
+      // If the first and last labels are the same (e.g. "Jan" ... "Jan"), remove the first one
+      // This happens when the data spans exactly a year or slightly more, showing the same month at both ends
+      if (labels.length > 1) {
+          const first = labels[0];
+          const last = labels[labels.length - 1];
+          if (first.text === last.text) {
+              labels.shift();
+          }
+      }
+      
+      return labels;
+  }, [weeks]);
+
   const getColor = (count: number) => {
-    if (count < 0) return 'transparent';
-    if (count === 0) return '#1f2937'; // gray-800
-    if (count < 5) return '#064e3b'; // emerald-900
-    if (count < 10) return '#065f46'; // emerald-800
-    if (count < 20) return '#10b981'; // emerald-500
-    return '#34d399'; // emerald-400
+    if (count < 0) return THEME_COLORS.heatmapEmpty; // Render padding as empty cells
+    if (count === 0) return THEME_COLORS.heatmapEmpty;
+    if (count < 5) return THEME_COLORS.heatmapLow;
+    if (count < 10) return THEME_COLORS.heatmapMid;
+    if (count < 20) return THEME_COLORS.heatmapHigh;
+    return THEME_COLORS.heatmapMax;
   };
 
   return (
     <div className="widget-card active-days">
       <div className="widget-header">
         <h3>Active Days</h3>
-        <span className="info-icon">ⓘ</span>
       </div>
       <div className="heatmap-container">
-        <div className="heatmap-grid">
-          {weeks.map((week, wIndex) => (
-            <div key={wIndex} className="heatmap-col">
-              {week.map((day, dIndex) => (
-                <div
-                  key={day.key}
-                  className="heatmap-cell"
-                  style={{ backgroundColor: getColor(day.count) }}
-                  title={day.count >= 0 ? `${day.date.toLocaleDateString()}: ${day.count} contributions` : ''}
-                />
-              ))}
+        <div className="heatmap-content">
+          <div className="heatmap-months">
+            {monthLabels.map((label, i) => (
+                <span 
+                    key={i} 
+                    className="heatmap-month-label"
+                    style={{ left: `${label.index * 14}px` }} // 10px width + 4px gap = 14px
+                >
+                    {label.text}
+                </span>
+            ))}
+          </div>
+          <div className="heatmap-body">
+            <div className="heatmap-weekdays">
+                <span>M</span>
+                <span>W</span>
+                <span>F</span>
             </div>
-          ))}
+            <div className="heatmap-grid">
+            {weeks.map((week, wIndex) => (
+                <div key={wIndex} className="heatmap-col">
+                {week.map((day, dIndex) => (
+                    // Only render rows 1 (Mon), 3 (Wed), 5 (Fri) for labels, but render all cells
+                    // But here we are iterating columns (weeks) then rows (days)
+                    // The days array is 0=Sun, 1=Mon, ...
+                    // If we want Mon as start, we need to shift. Assuming Sun start for now as per standard JS Date
+                    <div
+                    key={day.key}
+                    className="heatmap-cell"
+                    style={{ backgroundColor: getColor(day.count) }}
+                    title={day.count >= 0 ? `${day.date.toLocaleDateString()}: ${day.count} contributions` : ''}
+                    />
+                ))}
+                </div>
+            ))}
+            </div>
+          </div>
+          <div className="heatmap-legend">
+            <span>Less</span>
+            <div className="legend-cells">
+                <div className="heatmap-cell" style={{ backgroundColor: THEME_COLORS.heatmapEmpty }}></div>
+                <div className="heatmap-cell" style={{ backgroundColor: THEME_COLORS.heatmapLow }}></div>
+                <div className="heatmap-cell" style={{ backgroundColor: THEME_COLORS.heatmapMid }}></div>
+                <div className="heatmap-cell" style={{ backgroundColor: THEME_COLORS.heatmapHigh }}></div>
+                <div className="heatmap-cell" style={{ backgroundColor: THEME_COLORS.heatmapMax }}></div>
+            </div>
+            <span>More</span>
+          </div>
         </div>
       </div>
     </div>
@@ -126,10 +209,10 @@ const AICodeAcceptedWidget: React.FC<{ count: number, breakdown: Record<string, 
         <ResponsiveContainer width="100%" height={60}>
           <BarChart layout="vertical" data={chartData} margin={{ left: 40, right: 10 }}>
             <XAxis type="number" hide />
-            <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 11, fill: '#9ca3af' }} interval={0} />
+            <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 11, fill: THEME_COLORS.textMuted }} interval={0} />
             <Tooltip 
-              contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '4px', fontSize: '12px' }}
-              itemStyle={{ color: '#e5e7eb' }}
+              contentStyle={{ backgroundColor: THEME_COLORS.tooltipBg, border: 'none', borderRadius: '4px', fontSize: '12px' }}
+              itemStyle={{ color: THEME_COLORS.tooltipText }}
               cursor={{ fill: 'transparent' }}
             />
             <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={12}>
@@ -156,46 +239,6 @@ const ChatCountWidget: React.FC<{ count: number }> = ({ count }) => {
       <div className="widget-subtext">Agent</div>
       <div className="progress-bar-bg">
           <div className="progress-bar-fill" style={{ width: '100%' }}></div>
-      </div>
-    </div>
-  );
-};
-
-// 4. Most Frequent AI Partner
-const PartnerFrequencyWidget: React.FC<{ data: Record<string, number> }> = ({ data }) => {
-  const chartData = useMemo(() => {
-    return Object.entries(data)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 5);
-  }, [data]);
-
-  return (
-    <div className="widget-card">
-      <div className="widget-header">
-        <h3>Most Frequent AI Partner</h3>
-        <span className="info-icon">ⓘ</span>
-      </div>
-      <div className="chart-container-md">
-        <ResponsiveContainer width="100%" height={160}>
-          <BarChart data={chartData} margin={{ top: 20 }}>
-            <XAxis dataKey="name" tick={false} axisLine={false} />
-            <Tooltip 
-              cursor={{ fill: '#374151', opacity: 0.4 }}
-              contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '4px' }}
-              itemStyle={{ color: '#e5e7eb' }}
-            />
-            <Bar dataKey="value" fill="#4ade80" radius={[4, 4, 0, 0]} barSize={20}>
-                {chartData.map((_, index) => (
-                    <Cell key={`cell-${index}`} fillOpacity={1 - (index * 0.15)} />
-                ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-      <div className="partner-legend">
-        {chartData[0] && <div className="partner-name-highlight">{chartData[0].name}</div>}
-        <div className="partner-count">Number of conversations: {chartData[0]?.value || 0}</div>
       </div>
     </div>
   );
@@ -244,7 +287,7 @@ const ActivityPeriodWidget: React.FC<{ data: Record<string, number> }> = ({ data
 
   // Rotate to start from 06:00
   const rotatedData = useMemo(() => {
-      return [...chartData.slice(6), ...chartData.slice(0, 6)].map((d, i) => ({
+      return [...chartData.slice(6), ...chartData.slice(0, 6)].map((d) => ({
           ...d,
           displayHour: (d.hour) % 24
       }));
@@ -265,19 +308,19 @@ const ActivityPeriodWidget: React.FC<{ data: Record<string, number> }> = ({ data
                 <stop offset="95%" stopColor="#4ade80" stopOpacity={0}/>
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#374151" opacity={0.5} />
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={THEME_COLORS.gridStroke} opacity={0.5} />
             <XAxis 
                 dataKey="displayHour" 
                 tickFormatter={(tick) => `${String(tick).padStart(2, '0')}:00`}
                 interval={5}
-                tick={{ fill: '#9ca3af', fontSize: 12 }}
+                tick={{ fill: THEME_COLORS.textMuted, fontSize: 12 }}
                 axisLine={false}
                 tickLine={false}
             />
             <Tooltip 
-                contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '4px' }}
+                contentStyle={{ backgroundColor: THEME_COLORS.tooltipBg, border: 'none', borderRadius: '4px' }}
                 itemStyle={{ color: '#4ade80' }}
-                labelStyle={{ color: '#9ca3af' }}
+                labelStyle={{ color: THEME_COLORS.textMuted }}
             />
             <Area 
                 type="monotone" 
@@ -304,9 +347,6 @@ export const DashboardWidgets: React.FC<DashboardWidgetsProps> = ({ data }) => {
         <div className="widget-col">
             <AICodeAcceptedWidget count={data.CodeAiAcceptCnt7d} breakdown={data.CodeAiAcceptDiffLanguageCnt7d} />
             <ChatCountWidget count={data.CodeCompCnt7d} />
-        </div>
-        <div className="widget-col">
-            <PartnerFrequencyWidget data={data.CodeCompDiffAgentCnt7d} />
         </div>
         <div className="widget-col">
             <ModelPreferenceWidget data={data.CodeCompDiffModelCnt7d} />

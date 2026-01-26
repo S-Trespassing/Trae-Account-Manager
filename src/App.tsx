@@ -515,27 +515,6 @@ function App() {
     input.click();
   };
 
-  const handleClearAccounts = () => {
-    setConfirmModal({
-      isOpen: true,
-      title: "清空数据",
-      message: "确定要清空所有账号数据吗？该操作无法恢复。",
-      type: "danger",
-      onConfirm: async () => {
-        setConfirmModal(null);
-        try {
-          const count = await api.clearAccounts();
-          setAccounts([]);
-          setSelectedIds(new Set());
-          updateUsageCache({}, []);
-          addToast("success", `已清空 ${count} 个账号`);
-        } catch (err: any) {
-          addToast("error", err.message || "清空数据失败");
-        }
-      },
-    });
-  };
-
   // 批量刷新选中账号
   const handleBatchRefresh = async () => {
     if (selectedIds.size === 0) {
@@ -609,8 +588,9 @@ function App() {
                   <div className="toolbar-left">
                     <button
                       type="button"
-                      className="select-all"
+                      className="header-btn"
                       onClick={handleSelectAll}
+                      style={{ padding: "8px 14px" }}
                     >
                       {selectedIds.size === accounts.length && accounts.length > 0 ? "取消全选" : "全选"}
                     </button>
