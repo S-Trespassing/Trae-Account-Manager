@@ -1,0 +1,848 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { save } from "@tauri-apps/plugin-dialog";
+import { Sidebar } from "./components/Sidebar";
+import { AccountCard } from "./components/AccountCard";
+import { AccountListItem } from "./components/AccountListItem";
+import { AddAccountModal } from "./components/AddAccountModal";
+import { ContextMenu } from "./components/ContextMenu";
+import { DetailModal } from "./components/DetailModal";
+import { AccountLoginModal } from "./components/AccountLoginModal";
+import { Toast, ToastMessage } from "./components/Toast";
+import { ConfirmModal } from "./components/ConfirmModal";
+import { Dashboard } from "./pages/Dashboard";
+import { Settings } from "./pages/Settings";
+import { About } from "./pages/About";
+import * as api from "./api";
+import type { AccountBrief, AppSettings, UsageSummary } from "./types";
+import "./App.css";
+
+interface AccountWithUsage extends AccountBrief {
+  usage?: UsageSummary | null;
+  password?: string | null;
+}
+
+type ViewMode = "grid" | "list";
+const USAGE_CACHE_KEY = "trae_usage_cache_v1";
+
+function App() {
+  const [accounts, setAccounts] = useState<AccountWithUsage[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
+  const [currentPage, setCurrentPage] = useState("dashboard");
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+
+  // Toast 通知状态
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  // 确认弹窗状态
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: "danger" | "warning" | "info";
+    onConfirm: () => void;
+  } | null>(null);
+
+  // 右键菜单状态
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    accountId: string;
+  } | null>(null);
+
+  // 详情弹窗状态
+  const [detailAccount, setDetailAccount] = useState<AccountWithUsage | null>(null);
+
+  // 刷新中的账号 ID
+  const [refreshingIds, setRefreshingIds] = useState<Set<string>>(new Set());
+
+  // 重新登录弹窗状态
+  const [loginModal, setLoginModal] = useState<{
+    accountId: string;
+    accountName: string;
+    initialEmail?: string;
+  } | null>(null);
+
+  const quickRegisterNoticeRef = useRef<Map<string, number>>(new Map());
+  const toastDedupRef = useRef<Map<string, number>>(new Map());
+  const quickRegisterShowWindow = appSettings?.quick_register_show_window ?? true;
+
+  // 添加 Toast 通知
+  const addToast = useCallback(
+    (type: ToastMessage["type"], message: string, duration?: number, dedupeKey?: string) => {
+      if (dedupeKey) {
+        const now = Date.now();
+        const last = toastDedupRef.current.get(dedupeKey);
+        if (last && now - last < 800) {
+          return;
+        }
+        toastDedupRef.current.set(dedupeKey, now);
+      }
+      const id =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      setToasts((prev) => [...prev, { id, type, message, duration }]);
+    },
+    []
+  );
+
+  // 移除 Toast 通知
+  const removeToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const readUsageCache = useCallback((): Record<string, UsageSummary> => {
+    try {
+      const raw = localStorage.getItem(USAGE_CACHE_KEY);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return {};
+      return parsed as Record<string, UsageSummary>;
+    } catch {
+      return {};
+    }
+  }, []);
+
+  const updateUsageCache = useCallback(
+    (updates: Record<string, UsageSummary>, accountIds?: string[]) => {
+      const cache = readUsageCache();
+      Object.entries(updates).forEach(([id, usage]) => {
+        cache[id] = usage;
+      });
+      if (accountIds) {
+        Object.keys(cache).forEach((id) => {
+          if (!accountIds.includes(id)) {
+            delete cache[id];
+          }
+        });
+      }
+      localStorage.setItem(USAGE_CACHE_KEY, JSON.stringify(cache));
+    },
+    [readUsageCache]
+  );
+
+  useEffect(() => {
+    let active = true;
+    api.getSettings()
+      .then((settings) => {
+        if (active) setAppSettings(settings);
+      })
+      .catch(() => {
+        if (active) {
+          setAppSettings({
+            quick_register_show_window: true,
+            auto_refresh_enabled: true,
+            privacy_auto_enable: false,
+          });
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    listen<{ id?: string; message: string }>("quick_register_notice", (event) => {
+      if (quickRegisterShowWindow) {
+        return;
+      }
+      const { id, message } = event.payload || {};
+      if (!message) return;
+      const key = id || message;
+      const now = Date.now();
+      const last = quickRegisterNoticeRef.current.get(key);
+      if (last && now - last < 800) {
+        return;
+      }
+      quickRegisterNoticeRef.current.set(key, now);
+      addToast("success", message, 2500);
+    })
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch(() => {});
+
+    return () => {
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }, [addToast, quickRegisterShowWindow]);
+
+  const refreshUsageForAccounts = useCallback(
+    async (list: AccountBrief[]) => {
+      if (list.length === 0) return;
+      const results = await Promise.allSettled(
+        list.map((account) => api.getAccountUsage(account.id))
+      );
+      const updates: Record<string, UsageSummary> = {};
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled") {
+          updates[list[index].id] = result.value;
+        }
+      });
+      if (Object.keys(updates).length > 0) {
+        setAccounts((prev) =>
+          prev.map((account) =>
+            updates[account.id] ? { ...account, usage: updates[account.id] } : account
+          )
+        );
+        updateUsageCache(updates, list.map((a) => a.id));
+      } else {
+        updateUsageCache({}, list.map((a) => a.id));
+      }
+    },
+    [updateUsageCache]
+  );
+
+  // 加载账号列表
+  const loadAccounts = useCallback(async () => {
+    setLoading(true);
+    try {
+      const list = await api.getAccounts();
+      const cache = readUsageCache();
+      const accountsWithUsage = list.map((account) => ({
+        ...account,
+        usage: cache[account.id] ?? null,
+      }));
+      setAccounts(accountsWithUsage);
+      setError(null);
+      setHasLoaded(true);
+      updateUsageCache({}, list.map((a) => a.id));
+      setLoading(false);
+      void refreshUsageForAccounts(list);
+    } catch (err: any) {
+      setError(err.message || "加载账号失败");
+      setHasLoaded(true);
+      setLoading(false);
+    }
+  }, [readUsageCache, refreshUsageForAccounts, updateUsageCache]);
+
+  // 初始加载
+  useEffect(() => {
+    loadAccounts();
+  }, [loadAccounts]);
+
+  // 删除账号
+  const handleDeleteAccount = async (accountId: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "删除账号",
+      message: "确定要删除此账号吗？删除后无法恢复。",
+      type: "danger",
+      onConfirm: async () => {
+        setConfirmModal(null);
+        try {
+          await api.removeAccount(accountId);
+          setAccounts((prev) => prev.filter((account) => account.id !== accountId));
+          setSelectedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(accountId);
+            return next;
+          });
+          addToast("success", "账号已删除");
+        } catch (err: any) {
+          addToast("error", err.message || "删除账号失败");
+        }
+      },
+    });
+  };
+
+  // 刷新单个账号
+  const handleRefreshAccount = async (
+    accountId: string,
+    options?: { silent?: boolean }
+  ) => {
+    // 防止重复刷新
+    if (refreshingIds.has(accountId)) {
+      return;
+    }
+
+    setRefreshingIds((prev) => new Set(prev).add(accountId));
+
+    try {
+      const usage = await api.getAccountUsage(accountId);
+      setAccounts((prev) =>
+        prev.map((a) => (a.id === accountId ? { ...a, usage } : a))
+      );
+      updateUsageCache({ [accountId]: usage });
+      if (!options?.silent) {
+        addToast("success", "数据刷新成功", 1500, "refresh-success");
+      }
+    } catch (err: any) {
+      addToast("error", err.message || "刷新失败");
+    } finally {
+      setRefreshingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(accountId);
+        return next;
+      });
+    }
+  };
+
+  // 选择账号
+  const handleSelectAccount = (accountId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(accountId)) {
+        next.delete(accountId);
+      } else {
+        next.add(accountId);
+      }
+      return next;
+    });
+  };
+
+  // 全选/取消全选
+  const handleSelectAll = () => {
+    if (selectedIds.size === accounts.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(accounts.map((a) => a.id)));
+    }
+  };
+
+  // 右键菜单
+  const handleContextMenu = (e: React.MouseEvent, accountId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, accountId });
+  };
+
+  // 复制 Token
+  const handleCopyToken = async (accountId: string) => {
+    try {
+      const account = await api.getAccount(accountId);
+      if (account.jwt_token) {
+        await navigator.clipboard.writeText(account.jwt_token);
+        addToast("success", "Token 已复制到剪贴板");
+      } else {
+        addToast("warning", "该账号没有有效的 Token");
+      }
+    } catch (err: any) {
+      addToast("error", err.message || "获取 Token 失败");
+    }
+  };
+
+  // 切换账号
+  const handleSwitchAccount = async (accountId: string) => {
+    const account = accounts.find((a) => a.id === accountId);
+    if (!account) return;
+
+    setConfirmModal({
+      isOpen: true,
+      title: "切换账号",
+      message: `确定要切换到账号 "${account.email || account.name}" 吗？\n\n系统将自动关闭 Trae IDE 并切换登录信息。`,
+      type: "warning",
+      onConfirm: async () => {
+        setConfirmModal(null);
+        addToast("info", "正在切换账号，请稍候...");
+        try {
+          await api.switchAccount(accountId);
+          await loadAccounts();
+          addToast("success", "账号切换成功，请重新打开 Trae IDE");
+        } catch (err: any) {
+          addToast("error", err.message || "切换账号失败");
+        }
+      },
+    });
+  };
+
+  // 查看详情
+  const handleViewDetail = async (accountId: string) => {
+    const account = accounts.find((a) => a.id === accountId);
+    if (!account) return;
+    try {
+      const full = await api.getAccount(accountId);
+      setDetailAccount({
+        ...account,
+        email: full.email,
+        password: full.password ?? null,
+      });
+    } catch (err: any) {
+      addToast("error", err.message || "获取账号详情失败");
+      setDetailAccount(account);
+    }
+  };
+
+  const handleUpdateCredentials = async (
+    accountId: string,
+    updates: { email?: string; password?: string }
+  ) => {
+    try {
+      const updated = await api.updateAccountProfile(accountId, {
+        email: updates.email ?? null,
+        password: updates.password ?? null,
+      });
+      setAccounts((prev) =>
+        prev.map((account) =>
+          account.id === accountId
+            ? { ...account, email: updated.email, password: updated.password ?? null }
+            : account
+        )
+      );
+      setDetailAccount((prev) =>
+        prev && prev.id === accountId
+          ? { ...prev, email: updated.email, password: updated.password ?? null }
+          : prev
+      );
+      addToast("success", "账号信息已更新", 1000);
+    } catch (err: any) {
+      addToast("error", err.message || "更新账号信息失败");
+      throw err;
+    }
+  };
+
+  const handleRelogin = async (accountId: string) => {
+    try {
+      const account = await api.getAccount(accountId);
+      const email = account.email || account.name;
+      const maskedEmail = account.email?.includes("*") ?? false;
+
+      if (account.cookies) {
+        try {
+          await api.refreshToken(accountId);
+          await handleRefreshAccount(accountId, { silent: true });
+          addToast("success", "已使用 Cookie 刷新 Token");
+          return;
+        } catch {}
+      }
+
+      if (account.password && account.email && !maskedEmail) {
+        try {
+          await api.refreshTokenWithPassword(accountId, account.password);
+          await handleRefreshAccount(accountId, { silent: true });
+          addToast("success", "已使用保存的密码刷新 Token");
+          return;
+        } catch {}
+      }
+
+      setLoginModal({
+        accountId,
+        accountName: email,
+        initialEmail: maskedEmail ? "" : account.email,
+      });
+    } catch (err: any) {
+      addToast("error", err.message || "重新登录失败");
+    }
+  };
+
+  const handleLoginSubmit = async (accountId: string, email: string, password: string) => {
+    const usage = await api.loginAccountWithEmail(accountId, email, password);
+    setAccounts((prev) =>
+      prev.map((account) =>
+        account.id === accountId
+          ? { ...account, email, password, usage }
+          : account
+      )
+    );
+    updateUsageCache({ [accountId]: usage });
+    setDetailAccount((prev) =>
+      prev && prev.id === accountId
+        ? { ...prev, email, password }
+        : prev
+    );
+    addToast("success", "重新登录成功");
+  };
+
+  // 获取礼包
+  const handleClaimGift = async (accountId: string) => {
+    const account = accounts.find((a) => a.id === accountId);
+    if (!account) return;
+
+    setConfirmModal({
+      isOpen: true,
+      title: "获取礼包",
+      message: `确定要为账号 "${account.email || account.name}" 领取周年礼包吗？\n\n领取后将自动刷新账号额度。`,
+      type: "info",
+      onConfirm: async () => {
+        setConfirmModal(null);
+        addToast("info", "正在领取礼包，请稍候...");
+        try {
+          await api.claimGift(accountId);
+          // 刷新账号数据
+          await handleRefreshAccount(accountId, { silent: true });
+          addToast("success", "礼包领取成功！额度已更新");
+        } catch (err: any) {
+          addToast("error", err.message || "领取礼包失败");
+        }
+      },
+    });
+  };
+
+  // 导出账号
+  const handleExportAccounts = async () => {
+    try {
+      const date = new Date().toISOString().split("T")[0];
+      const path = await save({
+        defaultPath: `trae-accounts-${date}.json`,
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (!path) return;
+      await api.exportAccountsToPath(path as string);
+      addToast("success", `已导出 ${accounts.length} 个账号`);
+    } catch (err: any) {
+      addToast("error", err.message || "导出失败");
+    }
+  };
+
+  // 导入账号
+  const handleImportAccounts = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        const count = await api.importAccounts(text);
+        addToast("success", `成功导入 ${count} 个账号`);
+        await loadAccounts();
+      } catch (err: any) {
+        addToast("error", err.message || "导入失败");
+      }
+    };
+    input.click();
+  };
+
+  const handleClearAccounts = () => {
+    setConfirmModal({
+      isOpen: true,
+      title: "清空数据",
+      message: "确定要清空所有账号数据吗？该操作无法恢复。",
+      type: "danger",
+      onConfirm: async () => {
+        setConfirmModal(null);
+        try {
+          const count = await api.clearAccounts();
+          setAccounts([]);
+          setSelectedIds(new Set());
+          updateUsageCache({}, []);
+          addToast("success", `已清空 ${count} 个账号`);
+        } catch (err: any) {
+          addToast("error", err.message || "清空数据失败");
+        }
+      },
+    });
+  };
+
+  // 批量刷新选中账号
+  const handleBatchRefresh = async () => {
+    if (selectedIds.size === 0) {
+      addToast("warning", "请先选择要刷新的账号");
+      return;
+    }
+
+    addToast("info", `正在刷新 ${selectedIds.size} 个账号...`);
+
+    for (const id of selectedIds) {
+      await handleRefreshAccount(id, { silent: true });
+    }
+  };
+
+  // 批量删除选中账号
+  const handleBatchDelete = () => {
+    if (selectedIds.size === 0) {
+      addToast("warning", "请先选择要删除的账号");
+      return;
+    }
+
+    setConfirmModal({
+      isOpen: true,
+      title: "批量删除",
+      message: `确定要删除选中的 ${selectedIds.size} 个账号吗？此操作无法撤销。`,
+      type: "danger",
+      onConfirm: async () => {
+        try {
+          for (const id of selectedIds) {
+            await api.removeAccount(id);
+          }
+          setSelectedIds(new Set());
+          addToast("success", `已删除 ${selectedIds.size} 个账号`);
+          await loadAccounts();
+        } catch (err: any) {
+          addToast("error", err.message || "删除失败");
+        }
+        setConfirmModal(null);
+      },
+    });
+  };
+
+  return (
+    <div className="app">
+      <Sidebar currentPage={currentPage} onNavigate={setCurrentPage} />
+
+      <div className="app-content">
+        {error && (
+          <div className="error-banner">
+            {error}
+            <button onClick={() => setError(null)}>×</button>
+          </div>
+        )}
+
+        {currentPage === "dashboard" && (
+          <Dashboard accounts={accounts} hasLoaded={hasLoaded} />
+        )}
+
+        {currentPage === "accounts" && (
+          <>
+            <header className="page-header">
+              <div className="header-left">
+                <h2 className="page-title">账号管理</h2>
+                <p>管理您的 Trae 账号</p>
+              </div>
+              <div className="header-right">
+                <span className="account-count">共 {accounts.length} 个账号</span>
+                <button className="header-btn" onClick={handleImportAccounts} title="导入账号">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                  </svg>
+                  导入
+                </button>
+                <button className="header-btn" onClick={handleExportAccounts} title="导出账号" disabled={accounts.length === 0}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                  </svg>
+                  导出
+                </button>
+                <button className="add-btn" onClick={() => setShowAddModal(true)}>
+                  <span>+</span> 添加账号
+                </button>
+              </div>
+            </header>
+
+            <main className="app-main">
+              {accounts.length > 0 && (
+                <div className="toolbar">
+                  <div className="toolbar-left">
+                    <label className="select-all">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.size === accounts.length && accounts.length > 0}
+                        onChange={handleSelectAll}
+                      />
+                      全选 ({selectedIds.size}/{accounts.length})
+                    </label>
+                    {selectedIds.size > 0 && (
+                      <div className="batch-actions">
+                        <button className="batch-btn" onClick={handleBatchRefresh}>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                            <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                          </svg>
+                          刷新
+                        </button>
+                        <button className="batch-btn danger" onClick={handleBatchDelete}>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                            <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                          </svg>
+                          删除
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="toolbar-right">
+                    <div className="view-toggle">
+                      <button
+                        className={`view-btn ${viewMode === "grid" ? "active" : ""}`}
+                        onClick={() => setViewMode("grid")}
+                        title="卡片视图"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                          <rect x="3" y="3" width="7" height="7"/>
+                          <rect x="14" y="3" width="7" height="7"/>
+                          <rect x="3" y="14" width="7" height="7"/>
+                          <rect x="14" y="14" width="7" height="7"/>
+                        </svg>
+                      </button>
+                      <button
+                        className={`view-btn ${viewMode === "list" ? "active" : ""}`}
+                        onClick={() => setViewMode("list")}
+                        title="列表视图"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                          <line x1="8" y1="6" x2="21" y2="6"/>
+                          <line x1="8" y1="12" x2="21" y2="12"/>
+                          <line x1="8" y1="18" x2="21" y2="18"/>
+                          <line x1="3" y1="6" x2="3.01" y2="6"/>
+                          <line x1="3" y1="12" x2="3.01" y2="12"/>
+                          <line x1="3" y1="18" x2="3.01" y2="18"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {loading ? (
+                <div className="loading">
+                  <div className="spinner"></div>
+                  <p>加载中...</p>
+                </div>
+              ) : accounts.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-icon">📋</div>
+                  <h3>暂无账号</h3>
+                  <p>点击上方按钮添加账号，或导入已有账号</p>
+                  <div className="empty-actions">
+                    <button className="empty-btn primary" onClick={() => setShowAddModal(true)}>
+                      添加账号
+                    </button>
+                    <button className="empty-btn" onClick={handleImportAccounts}>
+                      导入账号
+                    </button>
+                  </div>
+                </div>
+              ) : viewMode === "grid" ? (
+                <div className="account-grid">
+                  {accounts.map((account) => (
+                    <AccountCard
+                      key={account.id}
+                      account={account}
+                      usage={account.usage || null}
+                      selected={selectedIds.has(account.id)}
+                      onSelect={handleSelectAccount}
+                      onContextMenu={handleContextMenu}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="account-list">
+                  <div className="list-header">
+                    <div className="list-col checkbox"></div>
+                    <div className="list-col avatar"></div>
+                    <div className="list-col info">账号信息</div>
+                    <div className="list-col plan">套餐</div>
+                    <div className="list-col usage">使用量</div>
+                    <div className="list-col reset">重置时间</div>
+                    <div className="list-col status">状态</div>
+                    <div className="list-col actions"></div>
+                  </div>
+                  {accounts.map((account) => (
+                    <AccountListItem
+                      key={account.id}
+                      account={account}
+                      usage={account.usage || null}
+                      selected={selectedIds.has(account.id)}
+                      onSelect={handleSelectAccount}
+                      onContextMenu={handleContextMenu}
+                    />
+                  ))}
+                </div>
+              )}
+            </main>
+          </>
+        )}
+
+        {currentPage === "settings" && (
+          <Settings
+            onToast={addToast}
+            settings={appSettings}
+            onSettingsChange={setAppSettings}
+            onImportAccounts={handleImportAccounts}
+            onExportAccounts={handleExportAccounts}
+            onClearAccounts={handleClearAccounts}
+          />
+        )}
+
+        {currentPage === "about" && <About />}
+      </div>
+
+      {/* Toast 通知 */}
+      <Toast messages={toasts} onRemove={removeToast} />
+
+      {/* 确认弹窗 */}
+      {confirmModal && (
+        <ConfirmModal
+          isOpen={confirmModal.isOpen}
+          title={confirmModal.title}
+          message={confirmModal.message}
+          type={confirmModal.type}
+          confirmText="确定"
+          cancelText="取消"
+          onConfirm={confirmModal.onConfirm}
+          onCancel={() => setConfirmModal(null)}
+        />
+      )}
+
+      {/* 右键菜单 */}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          onRelogin={() => {
+            void handleRelogin(contextMenu.accountId);
+            setContextMenu(null);
+          }}
+          onViewDetail={() => {
+            void handleViewDetail(contextMenu.accountId);
+            setContextMenu(null);
+          }}
+          onRefresh={() => {
+            handleRefreshAccount(contextMenu.accountId);
+            setContextMenu(null);
+          }}
+          onUpdateToken={() => {
+            void handleRelogin(contextMenu.accountId);
+            setContextMenu(null);
+          }}
+          onCopyToken={() => {
+            handleCopyToken(contextMenu.accountId);
+            setContextMenu(null);
+          }}
+          onSwitchAccount={() => {
+            handleSwitchAccount(contextMenu.accountId);
+            setContextMenu(null);
+          }}
+          onClaimGift={() => {
+            handleClaimGift(contextMenu.accountId);
+            setContextMenu(null);
+          }}
+          onDelete={() => {
+            handleDeleteAccount(contextMenu.accountId);
+            setContextMenu(null);
+          }}
+          isCurrent={accounts.find(a => a.id === contextMenu.accountId)?.is_current || false}
+        />
+      )}
+
+      {/* 添加账号弹窗 */}
+      <AddAccountModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onToast={addToast}
+        onAccountAdded={loadAccounts}
+        quickRegisterShowWindow={quickRegisterShowWindow}
+      />
+
+      {/* 详情弹窗 */}
+      <DetailModal
+        isOpen={!!detailAccount}
+        onClose={() => setDetailAccount(null)}
+        account={detailAccount}
+        usage={detailAccount?.usage || null}
+        onUpdateCredentials={handleUpdateCredentials}
+      />
+
+      <AccountLoginModal
+        isOpen={!!loginModal}
+        accountId={loginModal?.accountId || ""}
+        accountName={loginModal?.accountName || ""}
+        initialEmail={loginModal?.initialEmail}
+        onClose={() => setLoginModal(null)}
+        onSubmit={handleLoginSubmit}
+      />
+    </div>
+  );
+}
+
+export default App;

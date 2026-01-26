@@ -1,0 +1,61 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies
+node_modules
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build outputs
+dist
+dist-ssr
+*.local
+src-tauri/target
+src-tauri/Cargo.lock
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Tauri
+src-tauri/target/
+src-tauri/WixTools
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*~
+machine*.rs.bak
+machine_temp*.txt
+machine_part*.rs
+machine_new.rs
+temp_repo/
+
+# Git
+.git/
+
+# Claude AI
+.claude/
+
+# Application data (optional, uncomment if you don't want to track)
+# *.db
+# *.sqlite
