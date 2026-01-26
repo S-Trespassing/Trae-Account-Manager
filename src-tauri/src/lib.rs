@@ -18,7 +18,7 @@ use uuid::Uuid;
 use warp::Filter;
 
 use account::{AccountBrief, AccountManager, Account};
-use api::{TraeApiClient, UsageSummary, UsageQueryResponse};
+use api::{TraeApiClient, UsageSummary, UsageQueryResponse, UserStatisticResult};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AppSettings {
@@ -1283,11 +1283,18 @@ async fn scan_trae_path() -> Result<String> {
     machine::scan_trae_path().map_err(ApiError::from)
 }
 
-/// 棰嗗彇绀煎寘
+/// 领取礼包
 #[tauri::command]
 async fn claim_gift(account_id: String, state: State<'_, AppState>) -> Result<()> {
     let mut manager = state.account_manager.lock().await;
     manager.claim_birthday_bonus(&account_id).await.map_err(ApiError::from)
+}
+
+/// 获取用户统计数据
+#[tauri::command]
+async fn get_user_statistics(account_id: String, state: State<'_, AppState>) -> Result<UserStatisticResult> {
+    let manager = state.account_manager.lock().await;
+    manager.get_account_statistics(&account_id).await.map_err(ApiError::from)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1343,6 +1350,7 @@ pub fn run() {
             set_trae_path,
             scan_trae_path,
             claim_gift,
+            get_user_statistics,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

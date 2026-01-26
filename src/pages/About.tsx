@@ -1,8 +1,6 @@
 export function About() {
   return (
     <div className="about-page">
-      <h2 className="page-title">关于</h2>
-
       <div className="about-card">
         <div className="about-logo">🚀</div>
         <h3>Trae Auto</h3>

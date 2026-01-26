@@ -1,6 +1,9 @@
+import { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
-import type { UsageSummary } from "../types";
+import * as api from "../api";
+import type { UsageSummary, UserStatisticData } from "../types";
 import { UsageEvents } from "../components/UsageEvents";
+import { DashboardWidgets } from "../components/DashboardWidgets";
 
 interface DashboardProps {
   accounts: Array<{
@@ -14,6 +17,35 @@ interface DashboardProps {
 }
 
 export function Dashboard({ accounts, hasLoaded = true }: DashboardProps) {
+  const [userStats, setUserStats] = useState<UserStatisticData | null>(null);
+  const [loadingStats, setLoadingStats] = useState(false);
+  const [statsError, setStatsError] = useState<string | null>(null);
+
+  const currentAccount = accounts.find(a => a.is_current) || accounts[0];
+
+  useEffect(() => {
+    async function fetchStats() {
+      if (!currentAccount) {
+        setUserStats(null);
+        return;
+      }
+      setLoadingStats(true);
+      setStatsError(null);
+      try {
+        console.log("Fetching stats for account:", currentAccount.id);
+        const stats = await api.getUserStatistics(currentAccount.id);
+        console.log("Stats received:", stats);
+        setUserStats(stats);
+      } catch (e: any) {
+        console.error("Failed to fetch user stats", e);
+        setStatsError(e.message || "获取统计数据失败");
+      } finally {
+        setLoadingStats(false);
+      }
+    }
+    fetchStats();
+  }, [currentAccount?.id]);
+
   const totalAccounts = accounts.length;
   const activeAccounts = accounts.filter(a => a.usage && a.usage.fast_request_left > 0).length;
 
@@ -136,6 +168,34 @@ export function Dashboard({ accounts, hasLoaded = true }: DashboardProps) {
           </div>
         </div>
       </div>
+      
+      {loadingStats && (
+        <div className="dashboard-widgets-section loading-placeholder" style={{ marginBottom: '24px', textAlign: 'center', padding: '40px', background: 'var(--bg-card)', borderRadius: '16px' }}>
+          <div className="spinner" style={{ margin: '0 auto 16px' }}></div>
+          <p style={{ color: 'var(--text-muted)' }}>正在加载统计数据...</p>
+        </div>
+      )}
+
+      {statsError && (
+        <div className="dashboard-widgets-section error-placeholder" style={{ marginBottom: '24px', textAlign: 'center', padding: '20px', background: 'var(--danger-bg)', borderRadius: '16px', color: 'var(--danger)' }}>
+          <p>⚠️ {statsError}</p>
+          <button 
+            onClick={() => {
+              // Trigger re-fetch logic (simplified by just reloading page or we could add a refetch function)
+              window.location.reload(); 
+            }}
+            style={{ marginTop: '10px', padding: '6px 12px', background: 'transparent', border: '1px solid currentColor', borderRadius: '4px', cursor: 'pointer', color: 'inherit' }}
+          >
+            重试
+          </button>
+        </div>
+      )}
+
+      {userStats && (
+        <div className="dashboard-widgets-section" style={{ marginBottom: '24px' }}>
+          <DashboardWidgets data={userStats} />
+        </div>
+      )}
 
       <div className="charts-grid-2col">
         <div className="chart-card">

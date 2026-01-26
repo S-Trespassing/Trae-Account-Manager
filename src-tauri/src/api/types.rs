@@ -103,6 +103,41 @@ pub struct UserInfoResult {
     pub store_country: Option<String>,
 }
 
+/// 用户统计数据响应
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetUserStatisticResponse {
+    #[serde(rename = "ResponseMetadata")]
+    pub response_metadata: ResponseMetadata,
+    #[serde(rename = "Result")]
+    pub result: UserStatisticResult,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserStatisticResult {
+    #[serde(rename = "UserID")]
+    pub user_id: String,
+    #[serde(rename = "RegisterDays")]
+    pub register_days: i32,
+    #[serde(rename = "AiCnt365d")]
+    pub ai_cnt_365d: std::collections::HashMap<String, i32>,
+    #[serde(rename = "CodeAiAcceptCnt7d")]
+    pub code_ai_accept_cnt_7d: i32,
+    #[serde(rename = "CodeAiAcceptDiffLanguageCnt7d")]
+    pub code_ai_accept_diff_language_cnt_7d: std::collections::HashMap<String, i32>,
+    #[serde(rename = "CodeCompCnt7d")]
+    pub code_comp_cnt_7d: i32,
+    #[serde(rename = "CodeCompDiffAgentCnt7d")]
+    pub code_comp_diff_agent_cnt_7d: std::collections::HashMap<String, i32>,
+    #[serde(rename = "CodeCompDiffModelCnt7d")]
+    pub code_comp_diff_model_cnt_7d: std::collections::HashMap<String, i32>,
+    #[serde(rename = "IdeActiveDiffHourCnt7d")]
+    pub ide_active_diff_hour_cnt_7d: std::collections::HashMap<String, i32>,
+    #[serde(rename = "DataDate")]
+    pub data_date: String,
+    #[serde(rename = "IsIde")]
+    pub is_ide: bool,
+}
+
 /// 用户配额/使用量响应
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntitlementListResponse {

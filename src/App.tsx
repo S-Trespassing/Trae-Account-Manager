@@ -302,6 +302,14 @@ function App() {
   };
 
   // 全选/取消全选
+  const handleSelectAll = () => {
+    if (selectedIds.size === accounts.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(accounts.map((account) => account.id)));
+    }
+  };
+
   // 右键菜单
   const handleContextMenu = (e: React.MouseEvent, accountId: string) => {
     e.preventDefault();
@@ -599,13 +607,13 @@ function App() {
               {accounts.length > 0 && (
                 <div className="toolbar">
                   <div className="toolbar-left">
-                    <label className="select-all">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.size === accounts.length && accounts.length > 0}
-                        onChange={handleSelectAll}
-                      />
-                    </label>
+                    <button
+                      type="button"
+                      className="select-all"
+                      onClick={handleSelectAll}
+                    >
+                      {selectedIds.size === accounts.length && accounts.length > 0 ? "取消全选" : "全选"}
+                    </button>
                     <div className="toolbar-search">
                       <svg
                         className="search-icon"
@@ -770,9 +778,6 @@ function App() {
             onToast={addToast}
             settings={appSettings}
             onSettingsChange={setAppSettings}
-            onImportAccounts={handleImportAccounts}
-            onExportAccounts={handleExportAccounts}
-            onClearAccounts={handleClearAccounts}
           />
         )}
 

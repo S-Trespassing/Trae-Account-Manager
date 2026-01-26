@@ -98,3 +98,18 @@ export interface AppSettings {
   auto_refresh_enabled: boolean;
   privacy_auto_enable: boolean;
 }
+
+// 用户统计数据
+export interface UserStatisticData {
+  UserID: string;
+  RegisterDays: number;
+  AiCnt365d: Record<string, number>;
+  CodeAiAcceptCnt7d: number;
+  CodeAiAcceptDiffLanguageCnt7d: Record<string, number>;
+  CodeCompCnt7d: number;
+  CodeCompDiffAgentCnt7d: Record<string, number>;
+  CodeCompDiffModelCnt7d: Record<string, number>;
+  IdeActiveDiffHourCnt7d: Record<string, number>;
+  DataDate: string;
+  IsIde: boolean;
+}

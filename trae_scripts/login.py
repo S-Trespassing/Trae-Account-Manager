@@ -120,3 +120,22 @@ if __name__ == "__main__":
         result = login(email, password)
         if result:
             print(json.dumps(result, indent=2))
+            
+            # Save to files
+            print("[*] Saving to cookie.json and token.json...")
+            
+            # Save token
+            with open("token.json", "w", encoding="utf-8") as f:
+                json.dump({"Token": result["token"]}, f, indent=4)
+                
+            # Parse cookies string back to dict for JSON storage
+            cookies_dict = {}
+            for item in result["cookies"].split("; "):
+                if "=" in item:
+                    k, v = item.split("=", 1)
+                    cookies_dict[k] = v
+            
+            with open("cookie.json", "w", encoding="utf-8") as f:
+                json.dump(cookies_dict, f, indent=4)
+                
+            print("[+] Saved credentials to files.")

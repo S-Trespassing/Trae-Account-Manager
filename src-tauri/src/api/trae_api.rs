@@ -4,6 +4,7 @@ use reqwest::cookie::{CookieStore, Jar};
 use serde_json::json;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use std::sync::Arc;
+use chrono::{Local, SecondsFormat, Utc};
 
 use super::types::*;
 
@@ -82,6 +83,13 @@ impl TraeApiClient {
             jwt_token: Some(token.to_string()),
             api_base,
         })
+    }
+
+    /// 创建新的 API 客户端（使用 Cookies + Token）
+    pub fn new_with_token_and_cookies(token: &str, cookies: &str) -> Result<Self> {
+        let mut client = Self::new(cookies)?;
+        client.jwt_token = Some(token.to_string());
+        Ok(client)
     }
 
     /// 从 Cookies 中检测 API 端点
@@ -267,15 +275,17 @@ impl TraeApiClient {
         headers.insert(header::ACCEPT, "application/json, text/plain, */*".parse()?);
 
         // 使用 from_bytes 来处理包含特殊字符的 Cookie
-        let cookie_value = header::HeaderValue::from_bytes(self.cookies.as_bytes())
-            .map_err(|e| anyhow!("Cookie 格式错误: {}", e))?;
-        headers.insert(header::COOKIE, cookie_value);
+        if !self.cookies.trim().is_empty() {
+            let cookie_value = header::HeaderValue::from_bytes(self.cookies.as_bytes())
+                .map_err(|e| anyhow!("Cookie 格式错误: {}", e))?;
+            headers.insert(header::COOKIE, cookie_value);
+        }
 
         headers.insert(header::ORIGIN, "https://www.trae.ai".parse()?);
         headers.insert(header::REFERER, "https://www.trae.ai/".parse()?);
         headers.insert(
             header::USER_AGENT,
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36".parse()?,
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36".parse()?,
         );
 
         if with_auth {
@@ -551,6 +561,39 @@ impl TraeApiClient {
         }
 
         Ok(())
+    }
+
+    /// 获取用户统计数据
+    pub async fn get_user_statistic_data(&self) -> Result<UserStatisticResult> {
+        let url = format!("{}/cloudide/api/v3/trae/GetUserStasticData", API_BASE_UG);
+        let headers = self.build_headers(true)?;
+
+        // Calculate time info for payload
+        let local = Local::now();
+        let offset = local.offset().local_minus_utc(); // seconds
+        let offset_minutes = offset.div_euclid(60);
+        let offset_hours = offset.div_euclid(3600);
+
+        let payload = json!({
+            "LocalTime": Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+            "Offset": offset_hours,
+            "OffsetMinutes": offset_minutes
+        });
+
+        let response = self
+            .client
+            .post(&url)
+            .headers(headers)
+            .json(&payload)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!("获取用户统计数据失败: {}", response.status()));
+        }
+
+        let data: GetUserStatisticResponse = response.json().await?;
+        Ok(data.result)
     }
 }
 

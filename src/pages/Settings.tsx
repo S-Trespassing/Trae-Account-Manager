@@ -7,18 +7,12 @@ interface SettingsProps {
   onToast?: (type: "success" | "error" | "warning" | "info", message: string, duration?: number) => void;
   settings?: AppSettings | null;
   onSettingsChange?: (settings: AppSettings) => void;
-  onImportAccounts?: () => void;
-  onExportAccounts?: () => void;
-  onClearAccounts?: () => void;
 }
 
 export function Settings({
   onToast,
   settings,
   onSettingsChange,
-  onImportAccounts,
-  onExportAccounts,
-  onClearAccounts,
 }: SettingsProps) {
   const [traeMachineId, setTraeMachineId] = useState<string>("");
   const [traeRefreshing, setTraeRefreshing] = useState(false);
@@ -174,8 +168,6 @@ export function Settings({
 
   return (
     <div className="settings-page">
-      <h2 className="page-title">设置</h2>
-
       {/* Trae IDE 机器码 */}
       <div className="settings-section">
         <h3>Trae IDE 机器码</h3>
@@ -303,22 +295,27 @@ export function Settings({
         <h3>通用设置</h3>
         <div className="setting-item">
           <div className="setting-info">
-            <div className="setting-label">自动刷新</div>
-            <div className="setting-desc">定时自动刷新账号使用量数据</div>
+            <div className="setting-label">
+              自动开启隐私模式
+              <button type="button" className="setting-help" onClick={handlePrivacyHelp}>
+                ?
+              </button>
+            </div>
+            <div className="setting-desc">切换账号后自动开启 Trae 隐私模式，Trae将额外重启一次用来应用配置</div>
           </div>
           <div className="setting-action">
             <button
               type="button"
-              className={`pill-toggle ${currentSettings.auto_refresh_enabled ? "on" : ""}`}
+              className={`pill-toggle ${currentSettings.privacy_auto_enable ? "on" : ""}`}
               onClick={() =>
                 updateSettings(
-                  { auto_refresh_enabled: !currentSettings.auto_refresh_enabled },
-                  "已更新自动刷新设置"
+                  { privacy_auto_enable: !currentSettings.privacy_auto_enable },
+                  "已更新隐私模式设置"
                 )
               }
               disabled={settingsDisabled}
               role="switch"
-              aria-checked={currentSettings.auto_refresh_enabled}
+              aria-checked={currentSettings.privacy_auto_enable}
             >
               <span className="pill-track"></span>
               <span className="pill-thumb"></span>
@@ -353,6 +350,31 @@ export function Settings({
 
         <div className="setting-item">
           <div className="setting-info">
+            <div className="setting-label">自动刷新</div>
+            <div className="setting-desc">定时自动刷新账号使用量数据</div>
+          </div>
+          <div className="setting-action">
+            <button
+              type="button"
+              className={`pill-toggle ${currentSettings.auto_refresh_enabled ? "on" : ""}`}
+              onClick={() =>
+                updateSettings(
+                  { auto_refresh_enabled: !currentSettings.auto_refresh_enabled },
+                  "已更新自动刷新设置"
+                )
+              }
+              disabled={settingsDisabled}
+              role="switch"
+              aria-checked={currentSettings.auto_refresh_enabled}
+            >
+              <span className="pill-track"></span>
+              <span className="pill-thumb"></span>
+            </button>
+          </div>
+        </div>
+
+        <div className="setting-item">
+          <div className="setting-info">
             <div className="setting-label">刷新间隔</div>
             <div className="setting-desc">自动刷新的时间间隔（分钟）</div>
           </div>
@@ -363,69 +385,6 @@ export function Settings({
               <option value="30">30 分钟</option>
               <option value="60">60 分钟</option>
             </select>
-          </div>
-        </div>
-      </div>
-
-      <div className="settings-section">
-        <h3>数据管理</h3>
-        <div className="setting-item">
-          <div className="setting-info">
-            <div className="setting-label">
-              自动开启隐私模式
-              <button type="button" className="setting-help" onClick={handlePrivacyHelp}>
-                ?
-              </button>
-            </div>
-            <div className="setting-desc">切换账号后自动开启 Trae 隐私模式，Trae将额外重启一次用来应用配置</div>
-          </div>
-          <div className="setting-action">
-            <button
-              type="button"
-              className={`pill-toggle ${currentSettings.privacy_auto_enable ? "on" : ""}`}
-              onClick={() =>
-                updateSettings(
-                  { privacy_auto_enable: !currentSettings.privacy_auto_enable },
-                  "已更新隐私模式设置"
-                )
-              }
-              disabled={settingsDisabled}
-              role="switch"
-              aria-checked={currentSettings.privacy_auto_enable}
-            >
-              <span className="pill-track"></span>
-              <span className="pill-thumb"></span>
-            </button>
-          </div>
-        </div>
-
-        <div className="setting-item">
-          <div className="setting-info">
-            <div className="setting-label">导出数据</div>
-            <div className="setting-desc">导出所有账号数据为 JSON 文件</div>
-          </div>
-          <div className="setting-action">
-            <button className="setting-btn" onClick={() => onExportAccounts?.()}>导出</button>
-          </div>
-        </div>
-
-        <div className="setting-item">
-          <div className="setting-info">
-            <div className="setting-label">导入数据</div>
-            <div className="setting-desc">从 JSON 文件导入账号数据</div>
-          </div>
-          <div className="setting-action">
-            <button className="setting-btn" onClick={() => onImportAccounts?.()}>导入</button>
-          </div>
-        </div>
-
-        <div className="setting-item danger">
-          <div className="setting-info">
-            <div className="setting-label">清空数据</div>
-            <div className="setting-desc">删除所有账号数据（不可恢复）</div>
-          </div>
-          <div className="setting-action">
-            <button className="setting-btn danger" onClick={() => onClearAccounts?.()}>清空</button>
           </div>
         </div>
       </div>

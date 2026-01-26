@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Account, AccountBrief, AppSettings, UsageSummary, UsageEventsResponse } from "./types";
+import type { Account, AccountBrief, AppSettings, UsageSummary, UsageEventsResponse, UserStatisticData } from "./types";
 
 // 添加账号（通过 Cookies）
 export async function addAccount(cookies: string): Promise<Account> {
@@ -212,4 +212,9 @@ export async function scanTraePath(): Promise<string> {
 // 领取礼包
 export async function claimGift(accountId: string): Promise<void> {
   return invoke("claim_gift", { accountId });
+}
+
+// 获取用户统计数据
+export async function getUserStatistics(accountId: string): Promise<UserStatisticData> {
+  return invoke("get_user_statistics", { accountId });
 }

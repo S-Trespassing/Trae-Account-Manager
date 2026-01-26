@@ -1,12 +1,24 @@
 import requests
 import json
 import time
+import os
 
 # Constants
 API_BASE_SG = "https://api-sg-central.trae.ai"
+TOKEN_FILE = "token.json"
 
-def query_usage(token, start_time, end_time, page_size=20, page_num=1):
-    url = f"{API_BASE_SG}/trae/api/v1/pay/query_user_usage_group_by_session"
+def load_token(file_path=TOKEN_FILE):
+    if not os.path.exists(file_path):
+        return None
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("Token")
+    except:
+        return None
+
+def query_usage_events(token, start_time, end_time, page_num=1, page_size=20):
+    url = f"{API_BASE_SG}/trae/api/v1/pay/list_usage_events"
     
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -20,11 +32,11 @@ def query_usage(token, start_time, end_time, page_size=20, page_num=1):
     data = {
         "start_time": start_time,
         "end_time": end_time,
-        "page_size": page_size,
-        "page_num": page_num
+        "page_num": page_num,
+        "page_size": page_size
     }
 
-    print(f"[*] Querying usage records...")
+    print(f"[*] Querying Usage Events (Page {page_num})...")
     resp = requests.post(url, headers=headers, json=data)
     
     if resp.status_code != 200:
@@ -34,16 +46,22 @@ def query_usage(token, start_time, end_time, page_size=20, page_num=1):
     return resp.json()
 
 if __name__ == "__main__":
-    import sys
-    if len(sys.argv) < 2:
-        print("Usage: python query_usage.py <token> [days_ago]")
-    else:
-        token = sys.argv[1]
-        days = int(sys.argv[2]) if len(sys.argv) > 2 else 7
+    import argparse
+    parser = argparse.ArgumentParser(description="Query Trae Usage Events")
+    parser.add_argument("--token", help="JWT Token")
+    parser.add_argument("--days", type=int, default=30, help="Number of days to look back")
+    
+    args = parser.parse_args()
+    
+    token = args.token or load_token()
+    
+    if not token:
+        print("Error: No token provided and token.json not found or invalid.")
+        exit(1)
         
-        end_time = int(time.time())
-        start_time = end_time - (days * 86400)
-        
-        result = query_usage(token, start_time, end_time)
-        if result:
-            print(json.dumps(result, indent=2))
+    end_time = int(time.time())
+    start_time = end_time - (args.days * 86400)
+    
+    result = query_usage_events(token, start_time, end_time)
+    if result:
+        print(json.dumps(result, indent=2))

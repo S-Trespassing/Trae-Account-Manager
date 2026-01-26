@@ -1,9 +1,21 @@
 import requests
 import json
+import os
 
 # Constants
 API_BASE_SG = "https://api-sg-central.trae.ai"
 API_BASE_US = "https://api-us-east.trae.ai"
+TOKEN_FILE = "token.json"
+
+def load_token(file_path=TOKEN_FILE):
+    if not os.path.exists(file_path):
+        return None
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("Token")
+    except:
+        return None
 
 def get_entitlements(token, api_base=API_BASE_SG):
     url = f"{api_base}/trae/api/v1/pay/user_current_entitlement_list"
@@ -44,10 +56,17 @@ def get_entitlements_with_retry(token):
 
 if __name__ == "__main__":
     import sys
-    if len(sys.argv) < 2:
-        print("Usage: python get_entitlements.py <token>")
-    else:
+    
+    token = None
+    if len(sys.argv) > 1:
         token = sys.argv[1]
-        result = get_entitlements_with_retry(token)
-        if result:
-            print(json.dumps(result, indent=2))
+    else:
+        token = load_token()
+        
+    if not token:
+        print("Error: No token provided and token.json not found or invalid.")
+        exit(1)
+        
+    result = get_entitlements_with_retry(token)
+    if result:
+        print(json.dumps(result, indent=2))

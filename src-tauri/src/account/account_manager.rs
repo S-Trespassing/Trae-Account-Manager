@@ -940,4 +940,21 @@ impl AccountManager {
         println!("[INFO] 成功领取礼包: {}", account.email);
         Ok(())
     }
+
+    /// 获取账号统计数据
+    pub async fn get_account_statistics(&self, account_id: &str) -> Result<crate::api::UserStatisticResult> {
+        let account = self.store.accounts.iter()
+            .find(|a| a.id == account_id)
+            .ok_or_else(|| anyhow!("账号不存在"))?;
+
+        let token = account.jwt_token.as_ref()
+            .ok_or_else(|| anyhow!("账号没有有效的 Token"))?;
+
+        let client = if account.cookies.trim().is_empty() {
+            TraeApiClient::new_with_token(token)?
+        } else {
+            TraeApiClient::new_with_token_and_cookies(token, &account.cookies)?
+        };
+        client.get_user_statistic_data().await
+    }
 }

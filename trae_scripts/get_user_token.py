@@ -1,8 +1,28 @@
 import requests
 import json
+import os
 
 # Constants
 API_BASE_SG = "https://api-sg-central.trae.ai"
+COOKIE_FILE = "cookie.json"
+
+def load_cookies(file_path=COOKIE_FILE):
+    """Load cookies from a JSON file and return as a string header."""
+    if not os.path.exists(file_path):
+        return None
+    
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            
+        # Convert dictionary to cookie string
+        cookie_parts = []
+        for key, value in data.items():
+            cookie_parts.append(f"{key}={value}")
+        return "; ".join(cookie_parts)
+    except Exception as e:
+        print(f"[!] Error loading cookies: {e}")
+        return None
 
 def get_user_token(cookies):
     url = f"{API_BASE_SG}/cloudide/api/v3/common/GetUserToken"
@@ -27,12 +47,17 @@ def get_user_token(cookies):
 
 if __name__ == "__main__":
     import sys
-    # You can pass cookies as a string argument
-    # Example: "sessionid=...; csrf=..."
-    if len(sys.argv) < 2:
-        print("Usage: python get_user_token.py <cookies_string>")
-    else:
+    
+    cookies = None
+    if len(sys.argv) > 1:
         cookies = sys.argv[1]
-        result = get_user_token(cookies)
-        if result:
-            print(json.dumps(result, indent=2))
+    else:
+        cookies = load_cookies()
+        
+    if not cookies:
+        print("Error: No cookies provided and cookie.json not found or invalid.")
+        exit(1)
+        
+    result = get_user_token(cookies)
+    if result:
+        print(json.dumps(result, indent=2))
