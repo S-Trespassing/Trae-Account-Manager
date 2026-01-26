@@ -1,33 +1,40 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `src/` holds the React + TypeScript UI. Key areas: `components/` for reusable UI, `pages/` for screens, `api.ts` for Tauri invoke wrappers, and `types/` for shared interfaces. `App.tsx` is the main shell.
-- `src/assets/` and `public/` contain static assets used by the frontend.
-- `src-tauri/` is the Rust backend. `src/lib.rs` wires Tauri commands, `src/main.rs` is the entry, `src/account/` owns account storage, `src/api/` wraps Trae HTTP calls, and `src/machine.rs` handles Windows registry helpers. `src-tauri/tauri.conf.json` is the app config.
-- `scripts/` and `trae_scripts/` contain automation helpers; `dist/` is generated build output and should not be edited by hand.
+- `src/` holds the React + TypeScript UI, with shared components in `src/components/` and top-level screens in `src/pages/`.
+- `src/types/` defines shared TypeScript types; `src/api.ts` centralizes frontend API calls.
+- `src-tauri/` contains the Rust backend and Tauri config (`src-tauri/tauri.conf.json`), with modules under `src-tauri/src/account/` and `src-tauri/src/api/`.
+- `public/` and `src/assets/` store static assets; `src-tauri/icons/` stores app icons.
+- `scripts/` includes Playwright helpers; `trae_scripts/` contains Python automation utilities.
+- `dist/` is generated build output; do not edit by hand.
 
 ## Build, Test, and Development Commands
-- `npm install` sets up JS dependencies.
-- `npm run tauri dev` runs the full desktop app (frontend + Tauri backend).
-- `npm run tauri build` builds the production desktop bundle.
-- `npm run dev` runs the frontend-only dev server.
-- `npm run build` builds the frontend bundle.
-- `npm run preview` serves the built frontend for a quick smoke check.
+- `npm install` installs frontend dependencies.
+- `npm run dev` starts the Vite dev server on `http://localhost:1420` (the Tauri dev URL).
+- `npm run tauri dev` runs the desktop app (Rust backend + Vite frontend).
+- `npm run build` type-checks and builds the frontend to `dist/`.
+- `npm run tauri build` builds the desktop bundle.
+- `npm run preview` serves the built frontend for smoke checks.
 
 ## Coding Style & Naming Conventions
-- TypeScript/React uses 2-space indentation, double quotes, and semicolons. Keep the Tauri boundary in `src/api.ts` and reuse shared types from `src/types/`.
-- Naming: React components and files use PascalCase (`AccountCard.tsx`), variables/functions use camelCase, and CSS classes use kebab-case (for example, `.account-card`).
-- Rust changes should stay inside `src-tauri/src/` and be formatted with `cargo fmt` where possible.
+- TypeScript/React uses 2-space indentation, double quotes, and semicolons.
+- Rust files follow standard `rustfmt` layout with 4-space indentation.
+- Component and page files are `PascalCase.tsx` (e.g., `src/components/AccountCard.tsx`).
+- Keep shared types in `src/types/` and reuse existing API helpers in `src/api.ts`.
+- `tsconfig.json` is strict; avoid unused locals/parameters and fix type errors early.
 
 ## Testing Guidelines
-- There is no dedicated automated test suite in this repo. Validate changes manually using `npm run tauri dev`.
-- Optional: `node scripts/playwright-delete.mjs` exercises account deletion via a running app (requires a CDP endpoint like `CDP_URL=http://127.0.0.1:9222`).
+- No unit-test runner is configured yet.
+- Playwright helper scripts exist for manual UI checks:
+  - `node scripts/verify-themes.mjs` (run `npm run dev` first; outputs `screenshots/`).
+  - `node scripts/playwright-delete.mjs` (requires the app running and a Chromium CDP endpoint; set `CDP_URL` if needed).
+- If you add tests, document the command here and keep naming consistent (e.g., `*.spec.ts`).
 
 ## Commit & Pull Request Guidelines
-- Git history is not available in this checkout, so follow clear, imperative commit subjects (for example, `Add account import flow`) and keep each commit scoped.
-- PRs should include a short description, test steps, and screenshots for UI updates in `src/`. Link relevant issues when applicable.
+- Recent history follows a Conventional Commits pattern: `type(scope): message` (e.g., `chore(build): update config`). Keep it consistent.
+- Write concise, present-tense commit messages and keep commits scoped to one change.
+- PRs should include: a brief description, linked issues (if any), testing performed (commands), and screenshots for UI changes.
 
-## Security & Configuration Notes
-- Do not commit real tokens or exported account data. Local app data is stored under `%APPDATA%\\com.sauce.trae-auto\\`.
-- Windows-only behavior lives in `src-tauri/src/machine.rs`; update docs if expanding platform support.
-- When reading files, prefer UTF-8 encoding whenever possible.
+## Security & Configuration Tips
+- App data is stored locally under `%APPDATA%\\com.sauce.trae-auto\\`; avoid committing real account data.
+- Keep `src-tauri/tauri.conf.json` and `vite.config.ts` aligned on the dev URL/port.

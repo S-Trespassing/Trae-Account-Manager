@@ -545,6 +545,45 @@ body {
   gap: var(--space-lg);
 }
 
+.toolbar-search {
+  display: flex;
+  align-items: center;
+  width: 260px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-secondary);
+  transition: all var(--transition);
+}
+
+.toolbar-search:focus-within {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.search-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+.toolbar-search-input {
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.toolbar-search-input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
 .toolbar-right {
   display: flex;
   align-items: center;
@@ -554,19 +593,15 @@ body {
 .select-all {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
-  font-size: 14px;
-  color: var(--text-secondary);
+  justify-content: center;
+  padding: 8px;
   cursor: pointer;
-  padding: var(--space-sm) var(--space-md);
   border-radius: var(--radius);
   transition: all var(--transition);
-  user-select: none;
 }
 
 .select-all:hover {
   background: var(--bg-hover);
-  color: var(--text-primary);
 }
 
 .select-all input {
@@ -577,6 +612,7 @@ body {
   border-radius: var(--radius-sm);
   background: var(--bg-input);
   border: 1px solid var(--border);
+  margin: 0;
 }
 
 /* Batch Actions - 批量操作 */
