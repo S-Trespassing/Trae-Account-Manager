@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import type { UsageSummary } from "../types";
 import { UsageEvents } from "../components/UsageEvents";
@@ -14,6 +15,51 @@ interface DashboardProps {
 }
 
 export function Dashboard({ accounts, hasLoaded = true }: DashboardProps) {
+  const [themeColors, setThemeColors] = useState({
+    primary: '#6366f1',
+    secondary: '#e5e7eb',
+    colors: ['#6366f1', '#8b5cf6', '#a855f7', '#d946ef']
+  });
+
+  useEffect(() => {
+    const updateColors = () => {
+      const styles = getComputedStyle(document.documentElement);
+      const primary = styles.getPropertyValue('--accent').trim() || '#6366f1';
+      // 使用 border 颜色作为未使用的灰色部分，在深色模式下会更合适
+      const secondary = styles.getPropertyValue('--bg-active').trim() || '#e5e7eb';
+      
+      // 生成基于主色的色板
+      const colors = [
+        primary,
+        styles.getPropertyValue('--accent-hover').trim() || '#8b5cf6',
+        styles.getPropertyValue('--accent-light').trim() || '#a855f7',
+        // 第四个颜色稍微变暗或变亮一点
+        primary
+      ];
+      
+      setThemeColors({ primary, secondary, colors });
+    };
+
+    // 初始化颜色
+    updateColors();
+
+    // 监听主题变化
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
+          updateColors();
+        }
+      });
+    });
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme']
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
   const totalAccounts = accounts.length;
   const activeAccounts = accounts.filter(a => a.usage && a.usage.fast_request_left > 0).length;
 
@@ -35,8 +81,8 @@ export function Dashboard({ accounts, hasLoaded = true }: DashboardProps) {
   const usagePercent = totalLimit > 0 ? Math.round((totalUsed / totalLimit) * 100) : 0;
 
   const pieData = [
-    { name: '已使用', value: totalUsed, color: '#6366f1' },
-    { name: '剩余', value: totalLeft, color: '#e5e7eb' },
+    { name: '已使用', value: totalUsed, color: themeColors.primary },
+    { name: '剩余', value: totalLeft, color: themeColors.secondary },
   ];
 
 
@@ -52,8 +98,6 @@ export function Dashboard({ accounts, hasLoaded = true }: DashboardProps) {
     }
     return acc;
   }, [] as { name: string; value: number }[]);
-
-  const COLORS = ['#6366f1', '#8b5cf6', '#a855f7', '#d946ef'];
 
   return (
     <div className="dashboard">
@@ -169,11 +213,11 @@ export function Dashboard({ accounts, hasLoaded = true }: DashboardProps) {
           </div>
           <div className="chart-legend">
             <div className="legend-item">
-              <span className="legend-dot" style={{ background: '#6366f1' }}></span>
+              <span className="legend-dot" style={{ background: themeColors.primary }}></span>
               <span>已使用 ({Math.round(totalUsed)})</span>
             </div>
             <div className="legend-item">
-              <span className="legend-dot" style={{ background: '#e5e7eb' }}></span>
+              <span className="legend-dot" style={{ background: themeColors.secondary }}></span>
               <span>剩余 ({Math.round(totalLeft)})</span>
             </div>
           </div>
@@ -196,7 +240,7 @@ export function Dashboard({ accounts, hasLoaded = true }: DashboardProps) {
                     label={({ name, percent }) => `${name || ''} ${((percent || 0) * 100).toFixed(0)}%`}
                   >
                     {quotaData.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      <Cell key={`cell-${index}`} fill={themeColors.colors[index % themeColors.colors.length]} />
                     ))}
                   </Pie>
                   <Tooltip />

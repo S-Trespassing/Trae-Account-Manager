@@ -334,9 +334,24 @@ pub fn open_trae() -> Result<()> {
 
     println!("[INFO] 正在启动 Trae IDE: {}", trae_exe.display());
 
-    Command::new(&trae_exe)
-        .spawn()
-        .map_err(|e| anyhow!("启动 Trae IDE 失败: {}", e))?;
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const DETACHED_PROCESS: u32 = 0x00000008;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
+        
+        Command::new(&trae_exe)
+            .creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+            .spawn()
+            .map_err(|e| anyhow!("启动 Trae IDE 失败: {}", e))?;
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Command::new(&trae_exe)
+            .spawn()
+            .map_err(|e| anyhow!("启动 Trae IDE 失败: {}", e))?;
+    }
 
     println!("[INFO] Trae IDE 已启动");
     Ok(())

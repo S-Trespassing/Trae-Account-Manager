@@ -12,28 +12,14 @@ import {
   CartesianGrid
 } from 'recharts';
 import type { UserStatisticData } from '../types';
+import { useThemeColors, ThemeColors } from '../hooks/useThemeColors';
 
 interface DashboardWidgetsProps {
   data: UserStatisticData;
 }
 
-const BLUE_COLORS = ['#60a5fa', '#3b82f6', '#2563eb', '#1d4ed8'];
-
-const THEME_COLORS = {
-  tooltipBg: '#16171A',
-  tooltipText: '#F5F9FE',
-  gridStroke: 'rgba(255, 255, 255, 0.1)',
-  textMuted: '#71717A',
-  heatmapEmpty: 'var(--heatmap-empty)',
-  // Trae Gradient Colors (approximated as solid for now, or use gradient in CSS)
-  heatmapLow: 'var(--heatmap-low)',
-  heatmapMid: 'var(--heatmap-mid)',
-  heatmapHigh: 'var(--heatmap-high)',
-  heatmapMax: 'var(--heatmap-max)'
-};
-
 // 1. Active Days Heatmap (Custom Implementation)
-const ActiveDaysWidget: React.FC<{ data: Record<string, number> }> = ({ data }) => {
+const ActiveDaysWidget: React.FC<{ data: Record<string, number>, theme: ThemeColors }> = ({ data, theme }) => {
   // Generate last 365 days
   const days = useMemo(() => {
     const result = [];
@@ -122,12 +108,12 @@ const ActiveDaysWidget: React.FC<{ data: Record<string, number> }> = ({ data }) 
   }, [weeks]);
 
   const getColor = (count: number) => {
-    if (count < 0) return THEME_COLORS.heatmapEmpty; // Render padding as empty cells
-    if (count === 0) return THEME_COLORS.heatmapEmpty;
-    if (count < 5) return THEME_COLORS.heatmapLow;
-    if (count < 10) return THEME_COLORS.heatmapMid;
-    if (count < 20) return THEME_COLORS.heatmapHigh;
-    return THEME_COLORS.heatmapMax;
+    if (count < 0) return theme.heatmapEmpty; // Render padding as empty cells
+    if (count === 0) return theme.heatmapEmpty;
+    if (count < 5) return theme.heatmapLow;
+    if (count < 10) return theme.heatmapMid;
+    if (count < 20) return theme.heatmapHigh;
+    return theme.heatmapMax;
   };
 
   return (
@@ -157,7 +143,7 @@ const ActiveDaysWidget: React.FC<{ data: Record<string, number> }> = ({ data }) 
             <div className="heatmap-grid">
             {weeks.map((week, wIndex) => (
                 <div key={wIndex} className="heatmap-col">
-                {week.map((day, dIndex) => (
+                {week.map((day) => (
                     // Only render rows 1 (Mon), 3 (Wed), 5 (Fri) for labels, but render all cells
                     // But here we are iterating columns (weeks) then rows (days)
                     // The days array is 0=Sun, 1=Mon, ...
@@ -176,11 +162,11 @@ const ActiveDaysWidget: React.FC<{ data: Record<string, number> }> = ({ data }) 
           <div className="heatmap-legend">
             <span>Less</span>
             <div className="legend-cells">
-                <div className="heatmap-cell" style={{ backgroundColor: THEME_COLORS.heatmapEmpty }}></div>
-                <div className="heatmap-cell" style={{ backgroundColor: THEME_COLORS.heatmapLow }}></div>
-                <div className="heatmap-cell" style={{ backgroundColor: THEME_COLORS.heatmapMid }}></div>
-                <div className="heatmap-cell" style={{ backgroundColor: THEME_COLORS.heatmapHigh }}></div>
-                <div className="heatmap-cell" style={{ backgroundColor: THEME_COLORS.heatmapMax }}></div>
+                <div className="heatmap-cell" style={{ backgroundColor: theme.heatmapEmpty }}></div>
+                <div className="heatmap-cell" style={{ backgroundColor: theme.heatmapLow }}></div>
+                <div className="heatmap-cell" style={{ backgroundColor: theme.heatmapMid }}></div>
+                <div className="heatmap-cell" style={{ backgroundColor: theme.heatmapHigh }}></div>
+                <div className="heatmap-cell" style={{ backgroundColor: theme.heatmapMax }}></div>
             </div>
             <span>More</span>
           </div>
@@ -191,7 +177,7 @@ const ActiveDaysWidget: React.FC<{ data: Record<string, number> }> = ({ data }) 
 };
 
 // 2. AI Code Accepted
-const AICodeAcceptedWidget: React.FC<{ count: number, breakdown: Record<string, number> }> = ({ count, breakdown }) => {
+const AICodeAcceptedWidget: React.FC<{ count: number, breakdown: Record<string, number>, theme: ThemeColors }> = ({ count, breakdown, theme }) => {
   const chartData = useMemo(() => {
     return Object.entries(breakdown)
       .map(([name, value]) => ({ name, value }))
@@ -209,15 +195,15 @@ const AICodeAcceptedWidget: React.FC<{ count: number, breakdown: Record<string, 
         <ResponsiveContainer width="100%" height={60}>
           <BarChart layout="vertical" data={chartData} margin={{ left: 40, right: 10 }}>
             <XAxis type="number" hide />
-            <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 11, fill: THEME_COLORS.textMuted }} interval={0} />
+            <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 11, fill: theme.textMuted }} interval={0} />
             <Tooltip
-              contentStyle={{ backgroundColor: THEME_COLORS.tooltipBg, border: 'none', borderRadius: '4px', fontSize: '12px' }}
-              itemStyle={{ color: THEME_COLORS.tooltipText }}
+              contentStyle={{ backgroundColor: theme.tooltipBg, border: 'none', borderRadius: '4px', fontSize: '12px' }}
+              itemStyle={{ color: theme.tooltipText }}
               cursor={{ fill: 'transparent' }}
             />
             <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={12}>
                 {chartData.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={BLUE_COLORS[index % BLUE_COLORS.length]} />
+                    <Cell key={`cell-${index}`} fill={theme.chartColors[index % theme.chartColors.length]} />
                 ))}
             </Bar>
           </BarChart>
@@ -276,7 +262,7 @@ const ModelPreferenceWidget: React.FC<{ data: Record<string, number> }> = ({ dat
 };
 
 // 6. Coding Activity Periods
-const ActivityPeriodWidget: React.FC<{ data: Record<string, number> }> = ({ data }) => {
+const ActivityPeriodWidget: React.FC<{ data: Record<string, number>, theme: ThemeColors }> = ({ data, theme }) => {
   const chartData = useMemo(() => {
     // 0-23 hours
     return Array.from({ length: 24 }, (_, i) => ({
@@ -304,28 +290,28 @@ const ActivityPeriodWidget: React.FC<{ data: Record<string, number> }> = ({ data
           <AreaChart data={rotatedData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="colorActivity" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#4ade80" stopOpacity={0.3}/>
-                <stop offset="95%" stopColor="#4ade80" stopOpacity={0}/>
+                <stop offset="5%" stopColor={theme.primary} stopOpacity={0.3}/>
+                <stop offset="95%" stopColor={theme.primary} stopOpacity={0}/>
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={THEME_COLORS.gridStroke} opacity={0.5} />
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.gridStroke} opacity={0.5} />
             <XAxis
                 dataKey="displayHour"
                 tickFormatter={(tick) => `${String(tick).padStart(2, '0')}:00`}
                 interval={5}
-                tick={{ fill: THEME_COLORS.textMuted, fontSize: 12 }}
+                tick={{ fill: theme.textMuted, fontSize: 12 }}
                 axisLine={false}
                 tickLine={false}
             />
             <Tooltip
-                contentStyle={{ backgroundColor: THEME_COLORS.tooltipBg, border: 'none', borderRadius: '4px' }}
-                itemStyle={{ color: '#4ade80' }}
-                labelStyle={{ color: THEME_COLORS.textMuted }}
+                contentStyle={{ backgroundColor: theme.tooltipBg, border: 'none', borderRadius: '4px' }}
+                itemStyle={{ color: theme.primary }}
+                labelStyle={{ color: theme.textMuted }}
             />
             <Area
                 type="monotone"
                 dataKey="value"
-                stroke="#4ade80"
+                stroke={theme.primary}
                 fillOpacity={1}
                 fill="url(#colorActivity)"
                 strokeWidth={2}
@@ -338,14 +324,16 @@ const ActivityPeriodWidget: React.FC<{ data: Record<string, number> }> = ({ data
 };
 
 export const DashboardWidgets: React.FC<DashboardWidgetsProps> = ({ data }) => {
+  const theme = useThemeColors();
+  
   return (
     <div className="dashboard-widgets-grid">
       <div className="widget-row-full">
-        <ActiveDaysWidget data={data.AiCnt365d} />
+        <ActiveDaysWidget data={data.AiCnt365d} theme={theme} />
       </div>
       <div className="widget-row-split">
         <div className="widget-col">
-            <AICodeAcceptedWidget count={data.CodeAiAcceptCnt7d} breakdown={data.CodeAiAcceptDiffLanguageCnt7d} />
+            <AICodeAcceptedWidget count={data.CodeAiAcceptCnt7d} breakdown={data.CodeAiAcceptDiffLanguageCnt7d} theme={theme} />
             <ChatCountWidget count={data.CodeCompCnt7d} />
         </div>
         <div className="widget-col">
@@ -353,7 +341,7 @@ export const DashboardWidgets: React.FC<DashboardWidgetsProps> = ({ data }) => {
         </div>
       </div>
       <div className="widget-row-full">
-        <ActivityPeriodWidget data={data.IdeActiveDiffHourCnt7d} />
+        <ActivityPeriodWidget data={data.IdeActiveDiffHourCnt7d} theme={theme} />
       </div>
     </div>
   );

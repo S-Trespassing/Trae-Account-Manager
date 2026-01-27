@@ -1111,8 +1111,71 @@ async fn switch_account(account_id: String, force: Option<bool>, state: State<'_
 /// 获取账号使用量
 #[tauri::command]
 async fn get_account_usage(account_id: String, state: State<'_, AppState>) -> Result<UsageSummary> {
-    let mut manager = state.account_manager.lock().await;
-    manager.get_account_usage(&account_id).await.map_err(ApiError::from)
+    // 1. 获取账号信息（持有锁的时间极短）
+    let account = {
+        let manager = state.account_manager.lock().await;
+        manager.get_account(&account_id).map_err(ApiError::from)?
+    };
+
+    // 2. 执行网络请求（不持有锁，可并行）
+    let (summary, new_token) = fetch_usage_for_account(&account).await.map_err(ApiError::from)?;
+
+    // 3. 更新账号信息（持有锁的时间极短）
+    {
+        let mut manager = state.account_manager.lock().await;
+        // 忽略更新错误（可能账号已被删除），但不影响返回结果
+        let _ = manager.update_account_info_after_usage_check(
+            &account_id,
+            summary.plan_type.clone(),
+            new_token,
+        );
+    }
+
+    Ok(summary)
+}
+
+async fn fetch_usage_for_account(account: &Account) -> anyhow::Result<(UsageSummary, Option<(String, String)>)> {
+    let mut new_token_info = None;
+
+    let summary = if let Some(token) = &account.jwt_token {
+        // 优先使用 Token
+        let client = TraeApiClient::new_with_token(token)?;
+        match client.get_usage_summary_by_token().await {
+            Ok(summary) => summary,
+            Err(e) => {
+                let error_msg = e.to_string();
+                // 如果是 401 错误且有 Cookies，尝试刷新 Token
+                if error_msg.contains("401") && !account.cookies.is_empty() {
+                    println!("[INFO] Token 已过期，尝试使用 Cookies 刷新...");
+                    // 使用 Cookies 刷新 Token
+                    let mut cookie_client = TraeApiClient::new(&account.cookies)?;
+                    let token_result = cookie_client.get_user_token().await?;
+                    
+                    new_token_info = Some((token_result.token.clone(), token_result.expired_at.clone()));
+
+                    // 使用新 Token 重新获取使用量
+                    let new_client = TraeApiClient::new_with_token(&token_result.token)?;
+                    new_client.get_usage_summary_by_token().await?
+                } else if error_msg.contains("401") {
+                    return Err(anyhow::anyhow!("Token 已过期，请更新 Token 或 Cookies"));
+                } else {
+                    return Err(e);
+                }
+            }
+        }
+    } else if !account.cookies.is_empty() {
+        // 使用 Cookies
+        let mut client = TraeApiClient::new(&account.cookies)?;
+        // 先获取 token 以便保存
+        let token_result = client.get_user_token().await?;
+        new_token_info = Some((token_result.token.clone(), token_result.expired_at.clone()));
+        
+        client.get_usage_summary().await?
+    } else {
+        return Err(anyhow::anyhow!("账号没有有效的 Token 或 Cookies"));
+    };
+
+    Ok((summary, new_token_info))
 }
 
 /// 更新账号 Token

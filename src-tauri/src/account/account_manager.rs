@@ -957,4 +957,22 @@ impl AccountManager {
         };
         client.get_user_statistic_data().await
     }
+
+    pub fn update_account_info_after_usage_check(
+        &mut self,
+        account_id: &str,
+        plan_type: String,
+        new_token: Option<(String, String)>, // (token, expired_at)
+    ) -> Result<()> {
+        if let Some(acc) = self.store.accounts.iter_mut().find(|a| a.id == account_id) {
+            acc.plan_type = plan_type;
+            if let Some((token, expired_at)) = new_token {
+                acc.jwt_token = Some(token);
+                acc.token_expired_at = Some(expired_at);
+            }
+            acc.updated_at = chrono::Utc::now().timestamp();
+            self.save_store()?;
+        }
+        Ok(())
+    }
 }
