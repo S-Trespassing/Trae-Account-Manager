@@ -599,6 +599,8 @@ function App() {
             hasLoaded={hasLoaded} 
             onSwitchAccount={(id) => handleSwitchAccount(id)}
             onNavigate={setCurrentPage}
+            onRefresh={(id) => handleRefreshAccount(id)}
+            refreshingIds={refreshingIds}
           />
         )}
 

@@ -13,9 +13,12 @@ interface DashboardProps {
   }>;
   hasLoaded?: boolean;
   onSwitchAccount: (accountId: string) => void;
+  onNavigate?: (page: string) => void;
+  onRefresh?: (accountId: string) => void;
+  refreshingIds?: Set<string>;
 }
 
-export function Dashboard({ accounts, hasLoaded = true, onSwitchAccount, onNavigate }: DashboardProps) {
+export function Dashboard({ accounts, hasLoaded = true, onSwitchAccount, onNavigate, onRefresh, refreshingIds }: DashboardProps) {
   // Helper to calculate percentage
   const getPercent = (used: number, limit: number) => {
     if (limit <= 0) return 0;
@@ -126,9 +129,9 @@ export function Dashboard({ accounts, hasLoaded = true, onSwitchAccount, onNavig
 
   // Helper for progress bar color
   const getProgressColor = (percent: number) => {
-      if (percent > 50) return '#10b981'; // Green
-      if (percent > 20) return '#f59e0b'; // Orange
-      return '#ef4444'; // Red
+      if (percent > 50) return 'var(--success)'; // Green
+      if (percent > 20) return 'var(--warning)'; // Orange
+      return 'var(--danger)'; // Red
   };
 
   const formatTimeRemaining = (resetTime: number) => {
@@ -180,7 +183,7 @@ export function Dashboard({ accounts, hasLoaded = true, onSwitchAccount, onNavig
                 label="Fast Request 平均配额" 
                 sub="Fast Request Avg Quota"
                 status={stats.avgFastPercent > 10 ? "配额充足" : "配额紧张"}
-                statusColor={stats.avgFastPercent > 10 ? "#10b981" : "#f59e0b"}
+                statusColor={stats.avgFastPercent > 10 ? "var(--success)" : "var(--warning)"}
             />
              <StatCard 
                 icon="🎨" 
@@ -188,29 +191,69 @@ export function Dashboard({ accounts, hasLoaded = true, onSwitchAccount, onNavig
                 label="Slow Request 平均配额" 
                 sub="Slow Request Avg Quota"
                 status="配额充足"
-                statusColor="#10b981"
+                statusColor="var(--success)"
             />
         </div>
 
         {/* Main Content Split */}
         <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '24px' }}>
             {/* Left: Current Account */}
-            <div className="card" style={{ background: '#fff', borderRadius: '16px', padding: '24px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
+            <div className="card" style={{ background: 'var(--bg-card)', borderRadius: '16px', padding: '24px', boxShadow: 'var(--shadow)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', marginBottom: '20px' }}>
-                    <span style={{ color: '#10b981', marginRight: '8px' }}>
+                    <span style={{ color: 'var(--success)', marginRight: '8px' }}>
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                     </span>
-                    <h2 style={{ fontSize: '18px', fontWeight: '600', margin: 0 }}>当前账号</h2>
+                    <h2 style={{ fontSize: '18px', fontWeight: '600', margin: 0, color: 'var(--text-primary)' }}>当前账号</h2>
+                    {currentAccount && onRefresh && (
+                        <button
+                            onClick={() => onRefresh(currentAccount.id)}
+                            title="刷新数据"
+                            disabled={refreshingIds?.has(currentAccount.id)}
+                            style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: refreshingIds?.has(currentAccount.id) ? 'not-allowed' : 'pointer',
+                                padding: '4px',
+                                marginLeft: '8px',
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: 'var(--text-muted)',
+                                transition: 'all 0.2s',
+                            }}
+                            onMouseEnter={(e) => !refreshingIds?.has(currentAccount.id) && (e.currentTarget.style.backgroundColor = 'var(--bg-hover)')}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                        >
+                            <svg 
+                                width="16" 
+                                height="16" 
+                                viewBox="0 0 24 24" 
+                                fill="none" 
+                                stroke="currentColor" 
+                                strokeWidth="2" 
+                                strokeLinecap="round" 
+                                strokeLinejoin="round"
+                                style={{
+                                    animation: refreshingIds?.has(currentAccount.id) ? 'spin 1s linear infinite' : 'none'
+                                }}
+                            >
+                                <path d="M23 4v6h-6"></path>
+                                <path d="M1 20v-6h6"></path>
+                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                            </svg>
+                        </button>
+                    )}
                 </div>
 
                 {currentAccount ? (
                     <>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <span style={{ fontSize: '16px', fontWeight: '500' }}>{currentAccount.email || currentAccount.name}</span>
+                                <span style={{ fontSize: '16px', fontWeight: '500', color: 'var(--text-primary)' }}>{currentAccount.email || currentAccount.name}</span>
                             </div>
                             <span style={{ 
-                                background: '#6366f1', 
+                                background: 'var(--accent)', 
                                 color: 'white', 
                                 padding: '4px 12px', 
                                 borderRadius: '20px', 
@@ -256,7 +299,7 @@ export function Dashboard({ accounts, hasLoaded = true, onSwitchAccount, onNavig
                                     )}
                                 </>
                             ) : (
-                                <div style={{ color: '#9ca3af', textAlign: 'center', padding: '20px' }}>暂无使用量数据</div>
+                                <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>暂无使用量数据</div>
                             )}
                         </div>
 
@@ -265,13 +308,21 @@ export function Dashboard({ accounts, hasLoaded = true, onSwitchAccount, onNavig
                                 width: '100%', 
                                 marginTop: '30px', 
                                 padding: '12px', 
-                                background: 'white', 
-                                border: '1px solid #e5e7eb', 
+                                background: 'var(--bg-secondary)', 
+                                border: '1px solid var(--border)', 
                                 borderRadius: '8px',
                                 cursor: 'pointer',
                                 fontSize: '14px',
-                                color: '#4b5563',
+                                color: 'var(--text-secondary)',
                                 transition: 'all 0.2s'
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+                                e.currentTarget.style.color = 'var(--text-primary)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
+                                e.currentTarget.style.color = 'var(--text-secondary)';
                             }}
                             onClick={() => {
                                 if (onNavigate) {
@@ -283,19 +334,19 @@ export function Dashboard({ accounts, hasLoaded = true, onSwitchAccount, onNavig
                         </button>
                     </>
                 ) : (
-                    <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
+                    <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
                         未检测到当前登录账号
                     </div>
                 )}
             </div>
 
             {/* Right: Best Account Recommendation */}
-            <div className="card" style={{ background: '#fff', borderRadius: '16px', padding: '24px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column' }}>
+            <div className="card" style={{ background: 'var(--bg-card)', borderRadius: '16px', padding: '24px', boxShadow: 'var(--shadow)', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', alignItems: 'center', marginBottom: '20px' }}>
-                    <span style={{ color: '#3b82f6', marginRight: '8px' }}>
+                    <span style={{ color: 'var(--accent)', marginRight: '8px' }}>
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
                     </span>
-                    <h2 style={{ fontSize: '18px', fontWeight: '600', margin: 0 }}>最佳账号推荐</h2>
+                    <h2 style={{ fontSize: '18px', fontWeight: '600', margin: 0, color: 'var(--text-primary)' }}>最佳账号推荐</h2>
                 </div>
 
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -305,20 +356,20 @@ export function Dashboard({ accounts, hasLoaded = true, onSwitchAccount, onNavig
                                 const percent = acc.usage ? getPercent(acc.usage.fast_request_used, acc.usage.fast_request_limit) : 0;
                                 return (
                                     <div key={acc.id} style={{ 
-                                        background: idx === 0 ? '#f0fdf4' : '#f0f9ff', // Light green for 1st, Light blue for 2nd
+                                        background: idx === 0 ? 'var(--success-bg)' : 'var(--info-bg)',
                                         borderRadius: '12px',
                                         padding: '16px',
                                         border: '1px solid transparent',
-                                        borderColor: idx === 0 ? '#bbf7d0' : '#bae6fd',
+                                        borderColor: idx === 0 ? 'var(--success-light)' : 'var(--info)',
                                         display: 'flex',
                                         flexDirection: 'column',
                                         gap: '8px'
                                     }}>
-                                        <div style={{ fontSize: '12px', color: idx === 0 ? '#15803d' : '#0369a1', fontWeight: '500' }}>
+                                        <div style={{ fontSize: '12px', color: idx === 0 ? 'var(--success)' : 'var(--info)', fontWeight: '500' }}>
                                             {idx === 0 ? '首选推荐 (即将过期/额度最多)' : '备选推荐'}
                                         </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <div style={{ fontWeight: '500', color: '#1f2937', fontSize: '14px' }}>{acc.email || acc.name}</div>
+                                            <div style={{ fontWeight: '500', color: 'var(--text-primary)', fontSize: '14px' }}>{acc.email || acc.name}</div>
                                             <div style={{ 
                                                 background: getProgressColor(percent), 
                                                 color: 'white', 
@@ -335,7 +386,7 @@ export function Dashboard({ accounts, hasLoaded = true, onSwitchAccount, onNavig
                             })}
                         </>
                     ) : (
-                        <div style={{ textAlign: 'center', color: '#9ca3af', padding: '20px' }}>
+                        <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px' }}>
                             暂无可用推荐账号
                         </div>
                     )}
@@ -347,14 +398,14 @@ export function Dashboard({ accounts, hasLoaded = true, onSwitchAccount, onNavig
                             width: '100%', 
                             marginTop: '20px', 
                             padding: '12px', 
-                            background: '#3b82f6', 
-                            color: 'white', 
+                            background: 'var(--gradient-accent)', 
+                            color: 'var(--text-inverse)', 
                             border: 'none', 
                             borderRadius: '8px',
                             cursor: 'pointer',
                             fontSize: '14px',
                             fontWeight: '500',
-                            boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.5)'
+                            boxShadow: 'var(--shadow-md)'
                         }}
                         onClick={() => onSwitchAccount(bestAccounts[0].id)}
                     >
@@ -383,10 +434,10 @@ export function Dashboard({ accounts, hasLoaded = true, onSwitchAccount, onNavig
 function StatCard({ icon, value, label, sub, status, statusColor, isWarning }: any) {
     return (
         <div style={{ 
-            background: '#fff', 
+            background: 'var(--bg-card)', 
             borderRadius: '16px', 
             padding: '20px', 
-            boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
+            boxShadow: 'var(--shadow)',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
@@ -396,29 +447,29 @@ function StatCard({ icon, value, label, sub, status, statusColor, isWarning }: a
                 <div style={{ 
                     width: '40px', 
                     height: '40px', 
-                    background: isWarning ? '#fef2f2' : '#f3f4f6', 
+                    background: isWarning ? 'var(--danger-bg)' : 'var(--bg-hover)', 
                     borderRadius: '10px', 
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center',
                     fontSize: '20px',
-                    color: isWarning ? '#ef4444' : '#4b5563'
+                    color: isWarning ? 'var(--danger)' : 'var(--text-secondary)'
                 }}>
                     {icon}
                 </div>
             </div>
             <div>
-                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#111827', marginBottom: '4px' }}>{value}</div>
-                <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '2px' }}>{label}</div>
+                <div style={{ fontSize: '24px', fontWeight: 'bold', color: 'var(--text-primary)', marginBottom: '4px' }}>{value}</div>
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '2px' }}>{label}</div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                     {/* <div style={{ fontSize: '12px', color: '#9ca3af' }}>{sub}</div> */}
+                     {/* <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{sub}</div> */}
                      {status && (
                          <div style={{ fontSize: '12px', color: statusColor, fontWeight: '500' }}>
                              {status === '-' ? '' : `✓ ${status}`}
                          </div>
                      )}
                      {isWarning && (
-                         <div style={{ fontSize: '12px', color: '#ef4444', fontWeight: '500' }}>
+                         <div style={{ fontSize: '12px', color: 'var(--danger)', fontWeight: '500' }}>
                              配额 {'<'} 20%
                          </div>
                      )}
@@ -429,22 +480,22 @@ function StatCard({ icon, value, label, sub, status, statusColor, isWarning }: a
 }
 
 function UsageBar({ label, percent, resetTime, formatTime, isExtra, used, limit }: any) {
-    const color = percent > 50 ? '#10b981' : (percent > 20 ? '#f59e0b' : '#ef4444');
+    const color = percent > 50 ? 'var(--success)' : (percent > 20 ? 'var(--warning)' : 'var(--danger)');
     
     return (
         <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
-                <span style={{ fontWeight: '500', color: '#374151' }}>{label}</span>
-                <span style={{ color: '#6b7280', fontSize: '12px' }}>
+                <span style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{label}</span>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
                     {isExtra ? 'Expires: ' : 'R: '} 
                     {resetTime ? formatTime(resetTime) : '--'} 
-                    <span style={{ marginLeft: '8px', marginRight: '8px', color: '#4b5563' }}>
+                    <span style={{ marginLeft: '8px', marginRight: '8px', color: 'var(--text-secondary)' }}>
                         {limit > 0 ? `剩余: ${Math.round(limit - used)}` : ''}
                     </span>
                     <span style={{ color: color, fontWeight: 'bold' }}>{percent}%</span>
                 </span>
             </div>
-            <div style={{ width: '100%', height: '8px', background: '#f3f4f6', borderRadius: '4px', overflow: 'hidden' }}>
+            <div style={{ width: '100%', height: '8px', background: 'var(--bg-hover)', borderRadius: '4px', overflow: 'hidden' }}>
                 <div style={{ 
                     width: `${percent}%`, 
                     height: '100%', 

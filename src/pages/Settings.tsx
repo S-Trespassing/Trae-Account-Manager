@@ -168,10 +168,10 @@ export function Settings({
 
   return (
     <div className="settings-page">
-      {/* Trae IDE 机器码 */}
+      {/* Trae IDE 设置 */}
       <div className="settings-section">
-        <h3>Trae IDE 机器码</h3>
-        <div className="machine-id-card trae-card">
+        <h3>Trae IDE</h3>
+        <div className="machine-id-card trae-card" style={{ marginBottom: '20px' }}>
           <div className="machine-id-header">
             <div className="machine-id-icon trae-icon">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -235,11 +235,8 @@ export function Settings({
             <span>清除登录状态会重置机器码并删除所有登录信息，Trae IDE 将需要重新登录。请先关闭 Trae IDE。</span>
           </div>
         </div>
-      </div>
 
-      {/* Trae IDE 路径设置 */}
-      <div className="settings-section">
-        <h3>Trae IDE 路径</h3>
+        {/* Trae IDE 路径 */}
         <div className="machine-id-card trae-card">
           <div className="machine-id-header">
             <div className="machine-id-icon trae-icon">
@@ -289,40 +286,43 @@ export function Settings({
             <span>切换账号后会自动打开 Trae IDE。如果自动扫描找不到，请手动设置 Trae.exe 的完整路径。</span>
           </div>
         </div>
+
+        {/* 自动开启隐私模式 */}
+        <div className="machine-id-card trae-card" style={{ marginTop: '20px' }}>
+          <div className="setting-item" style={{ borderBottom: 'none', padding: 0 }}>
+            <div className="setting-info">
+              <div className="setting-label">
+                自动开启隐私模式
+                <button type="button" className="setting-help" onClick={handlePrivacyHelp}>
+                  ?
+                </button>
+              </div>
+              <div className="setting-desc">切换账号后自动开启 Trae 隐私模式，Trae将额外重启一次用来应用配置</div>
+            </div>
+            <div className="setting-action">
+              <button
+                type="button"
+                className={`pill-toggle ${currentSettings.privacy_auto_enable ? "on" : ""}`}
+                onClick={() =>
+                  updateSettings(
+                    { privacy_auto_enable: !currentSettings.privacy_auto_enable },
+                    "已更新隐私模式设置"
+                  )
+                }
+                disabled={settingsDisabled}
+                role="switch"
+                aria-checked={currentSettings.privacy_auto_enable}
+              >
+                <span className="pill-track"></span>
+                <span className="pill-thumb"></span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="settings-section">
         <h3>通用设置</h3>
-        <div className="setting-item">
-          <div className="setting-info">
-            <div className="setting-label">
-              自动开启隐私模式
-              <button type="button" className="setting-help" onClick={handlePrivacyHelp}>
-                ?
-              </button>
-            </div>
-            <div className="setting-desc">切换账号后自动开启 Trae 隐私模式，Trae将额外重启一次用来应用配置</div>
-          </div>
-          <div className="setting-action">
-            <button
-              type="button"
-              className={`pill-toggle ${currentSettings.privacy_auto_enable ? "on" : ""}`}
-              onClick={() =>
-                updateSettings(
-                  { privacy_auto_enable: !currentSettings.privacy_auto_enable },
-                  "已更新隐私模式设置"
-                )
-              }
-              disabled={settingsDisabled}
-              role="switch"
-              aria-checked={currentSettings.privacy_auto_enable}
-            >
-              <span className="pill-track"></span>
-              <span className="pill-thumb"></span>
-            </button>
-          </div>
-        </div>
-
         <div className="setting-item">
           <div className="setting-info">
             <div className="setting-label">快速注册显示浏览器窗口</div>
