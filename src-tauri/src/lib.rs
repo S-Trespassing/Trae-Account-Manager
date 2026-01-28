@@ -1395,9 +1395,32 @@ async fn open_pricing(account_id: String, app: AppHandle, state: State<'_, AppSt
         r#"
 (() => {{
   try {{
+    // 只在 trae.ai 域名下执行
     if (!location.hostname.endsWith('trae.ai')) return;
-    if (sessionStorage.getItem('trae_auth_injected')) return;
 
+    // 如果已经在 pricing 页面且已注入过，就不再执行
+    if (location.href.includes('/pricing') && sessionStorage.getItem('trae_auth_injected')) return;
+
+    console.log('[pricing] Starting auth injection...');
+
+    // 1. 尽力清除旧数据 (JS 能访问到的)
+    try {{
+        localStorage.clear();
+        sessionStorage.clear();
+        const oldCookies = document.cookie.split(";");
+        for (let i = 0; i < oldCookies.length; i++) {{
+            const cookie = oldCookies[i];
+            const eqPos = cookie.indexOf("=");
+            const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+            document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=.trae.ai";
+            document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=www.trae.ai";
+            document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+        }}
+    }} catch (e) {{
+        console.warn('[pricing] Clear old data failed', e);
+    }}
+
+    // 2. 注入新 Cookie
     const raw = `{cookies}`;
     const parts = raw ? raw.split(';').map(s => s.trim()).filter(Boolean) : [];
     const seen = new Set();
@@ -1410,12 +1433,21 @@ async fn open_pricing(account_id: String, app: AppHandle, state: State<'_, AppSt
       seen.add(name);
       document.cookie = `${{name}}=${{value}}; path=/; domain=.trae.ai; secure; samesite=lax`;
     }}
+    // 补全 IDC cookie
     if (!raw.includes('store-idc=') && !raw.includes('trae-target-idc=')) {{
       document.cookie = `store-idc=alisg; path=/; domain=.trae.ai; secure; samesite=lax`;
     }}
     
+    // 3. 标记并跳转
     sessionStorage.setItem('trae_auth_injected', 'true');
-    location.reload();
+    
+    if (!location.href.includes('/pricing')) {{
+        console.log('[pricing] Redirecting to pricing...');
+        window.location.href = "https://www.trae.ai/pricing";
+    }} else {{
+        console.log('[pricing] Reloading to apply cookies...');
+        location.reload();
+    }}
   }} catch (e) {{
     console.error('[pricing] cookie inject error', e);
   }}
@@ -1440,8 +1472,16 @@ async fn open_pricing(account_id: String, app: AppHandle, state: State<'_, AppSt
     .build()
     .map_err(|e| anyhow::anyhow!("无法打开购买窗口: {}", e))?;
 
-    let _ = webview.clear_all_browsing_data();
-    let _ = webview.navigate(Url::parse("https://www.trae.ai/pricing").unwrap());
+    // 强制清理数据
+    if let Err(e) = webview.clear_all_browsing_data() {
+        println!("[pricing] clear browsing data failed: {}", e);
+    } else {
+        println!("[pricing] cleared browsing data");
+    }
+
+    // 先导航到一个轻量页(404)来建立域上下文并执行注入，然后再由脚本跳转到 pricing
+    // 这样可以确保 Cookie 在请求 pricing 之前就已经准备好
+    let _ = webview.navigate(Url::parse("https://www.trae.ai/404_auth_init").unwrap());
     let _ = webview.set_focus();
     Ok(())
 }

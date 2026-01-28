@@ -415,24 +415,33 @@ export function Dashboard({ accounts, onSwitchAccount, onNavigate, onRefresh, re
                     )}
                 </div>
 
-                {bestAccounts.length > 0 && bestAccounts[0].id !== currentAccount?.id && (
+                {bestAccounts.length > 0 && (
                     <button 
                         style={{ 
                             width: '100%', 
                             marginTop: '20px', 
                             padding: '12px', 
-                            background: 'var(--gradient-accent)', 
-                            color: 'var(--text-inverse)', 
+                            background: bestAccounts[0].id === currentAccount?.id 
+                                ? 'var(--bg-hover)' 
+                                : 'var(--gradient-accent)', 
+                            color: bestAccounts[0].id === currentAccount?.id 
+                                ? 'var(--text-muted)' 
+                                : 'var(--text-inverse)', 
                             border: 'none', 
                             borderRadius: '8px',
-                            cursor: 'pointer',
+                            cursor: bestAccounts[0].id === currentAccount?.id ? 'not-allowed' : 'pointer',
                             fontSize: '14px',
                             fontWeight: '500',
-                            boxShadow: 'var(--shadow-md)'
+                            boxShadow: bestAccounts[0].id === currentAccount?.id ? 'none' : 'var(--shadow-md)'
                         }}
-                        onClick={() => onSwitchAccount(bestAccounts[0].id)}
+                        disabled={bestAccounts[0].id === currentAccount?.id}
+                        onClick={() => {
+                            if (bestAccounts[0].id !== currentAccount?.id) {
+                                onSwitchAccount(bestAccounts[0].id);
+                            }
+                        }}
                     >
-                        一键切换最佳
+                        {bestAccounts[0].id === currentAccount?.id ? '正在使用' : '一键切换最佳'}
                     </button>
                 )}
             </div>
