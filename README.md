@@ -3,19 +3,16 @@
 <div align="center">
 
 ![Trae Account Manager](https://img.shields.io/badge/Trae-Account%20Manager-blue?style=for-the-badge)
-![Version](https://img.shields.io/badge/version-1.0.0-green?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.0.0-green?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-orange?style=for-the-badge)
 
 **一款强大的 Trae IDE 多账号管理工具**
 
-> ℹ️ **说明**：本项目基于 [Yang-505/Trae-Account-Manager](https://github.com/Yang-505/Trae-Account-Manager) 原项目修改并二次开源。
-
 [功能特性](#-功能特性) • [快速开始](#-快速开始) • [使用指南](#-使用指南) • [常见问题](#-常见问题) • [贡献指南](#-贡献指南)
 
 </div>
-
----
+> ℹ️ 说明：本项目基于大佬 Yang-505 的 https://github.com/Yang-505/Trae-Account-Manager 项目修改并二次开源,重构了ui界面,多数功能优化,修复若干bug,优化页面加载速度
 
 ## ⭐ Star 星星走起 动动发财手点点 ⭐
 
@@ -192,7 +189,7 @@ npm run tauri build
 
 ## 📚 使用指南
 
-### 1️⃣ 首次使用
+### 首次使用
 
 #### 配置 Trae IDE 路径
 
@@ -202,93 +199,6 @@ npm run tauri build
    - 或点击 **手动设置** 按钮，选择 `Trae.exe` 文件位置
 3. 路径配置成功后会显示完整路径
 
-### 2️⃣ 添加账号
-
-#### 方法一：通过 Token 添加
-
-1. 点击右上角的 **添加账号** 按钮
-2. 输入你的 Trae IDE Token
-3. 点击 **添加** 按钮
-4. 系统会自动获取账号信息并保存
-
-#### 获取 Token 的方法
-
-1. 打开 Trae IDE
-2. 按 `F12` 打开开发者工具
-3. 切换到 `Application` 标签
-4. 在左侧找到 `Local Storage` → `vscode-webview://xxx`
-5. 找到包含 `iCubeAuthInfo` 的键
-6. 复制其中的 `token` 值
-
-### 3️⃣ 切换账号
-
-1. 在账号列表中找到要切换的账号
-2. 点击账号卡片上的 **切换** 按钮
-3. 在确认对话框中点击 **确定**
-4. 系统会自动：
-   - 关闭当前运行的 Trae IDE
-   - 清除旧账号的登录状态
-   - 写入新账号的登录信息
-   - 重新打开 Trae IDE
-
-> ⚠️ **注意**：切换账号前请保存 Trae IDE 中的工作内容
-
-### 4️⃣ 查看使用量
-
-#### 查看概览
-
-- 在仪表板页面可以看到所有账号的使用量概览
-- 每个账号卡片显示：
-  - 今日使用量
-  - 总使用量
-  - 使用进度条
-
-#### 查看详细记录
-
-1. 点击账号卡片上的 **详情** 按钮
-2. 在详情页面切换到 **使用记录** 标签
-3. 可以查看：
-   - 每次使用的时间
-   - 使用的 Token 数量
-   - 使用的模型
-   - 请求类型
-
-### 5️⃣ 管理机器码
-
-#### 查看 Trae IDE 机器码
-
-1. 进入 **设置** 页面
-2. 在 "Trae IDE 机器码" 部分可以看到当前机器码
-3. 点击 **复制** 按钮可以复制到剪贴板
-
-#### 清除登录状态
-
-1. 在设置页面点击 **清除登录状态** 按钮
-2. 确认操作
-3. 系统会：
-   - 重置 Trae IDE 机器码
-   - 清除所有登录信息
-   - 删除本地缓存数据
-
-> ⚠️ **注意**：清除登录状态后，Trae IDE 将变成全新安装状态，需要重新登录
-
-### 6️⃣ 数据导入导出
-
-#### 导出账号数据
-
-1. 进入 **设置** 页面
-2. 在 "数据管理" 部分点击 **导出** 按钮
-3. 选择保存位置
-4. 所有账号数据将导出为 JSON 文件
-
-#### 导入账号数据
-
-1. 进入 **设置** 页面
-2. 在 "数据管理" 部分点击 **导入** 按钮
-3. 选择之前导出的 JSON 文件
-4. 账号数据将被导入到应用中
-
----
 
 ## 🎯 使用场景
 
@@ -307,52 +217,6 @@ npm run tauri build
 ### 场景四：测试不同账号
 
 开发者可以快速切换不同账号，测试不同权限下的功能表现。
-
----
-
-## ❓ 常见问题
-
-### Q1: 切换账号后 Trae IDE 没有自动打开？
-
-**A:** 请检查以下几点：
-1. 确认已在设置中配置了正确的 Trae IDE 路径
-2. 确认 Trae.exe 文件存在且可执行
-3. 查看应用日志，确认是否有错误信息
-
-### Q2: 添加账号时提示 Token 无效？
-
-**A:** 请确认：
-1. Token 是否正确复制（没有多余的空格或换行）
-2. Token 是否已过期
-3. 网络连接是否正常
-
-### Q3: 切换账号后 Trae IDE 还是显示旧账号？
-
-**A:** 这种情况很少见，可以尝试：
-1. 手动关闭 Trae IDE
-2. 在设置中点击"清除登录状态"
-3. 重新切换账号
-
-### Q4: 如何备份我的账号数据？
-
-**A:**
-1. 进入设置页面
-2. 点击"导出数据"按钮
-3. 保存 JSON 文件到安全位置
-4. 需要恢复时使用"导入数据"功能
-
-### Q5: 应用数据存储在哪里？
-
-**A:**
-- Windows: `%APPDATA%\com.sauce.trae-auto\`
-- 包含账号信息、配置等数据
-
-### Q6: 支持 macOS 吗？
-
-**A:**
-目前仅支持 Windows 平台。macOS 版本正在开发中，敬请期待！
-
-> 注：Trae IDE 官方支持 Windows 和 macOS，但不支持 Linux。
 
 ---
 
@@ -441,23 +305,6 @@ Trae-Account-Manager/
 3. 选择合适的模板
 4. 详细描述问题或建议
 
----
-
-## 📝 开发计划
-
-### 🎯 近期计划
-
-- [ ] 支持账号分组管理
-- [ ] 添加账号使用统计图表
-- [ ] 支持自] 添加账号备注功能
-- [ ] 支持主题切换（暗色/亮色）
-
-### 🚀 远期计划
-
-- [ ] 支持 macOS 平台
-- [ ] 添加账号使用提醒
-- [ ] 支持多语言（英文、日文等）
-- [ ] 添加账号使用报表导出
 
 ---
 
@@ -493,7 +340,7 @@ Trae-Account-Manager/
 
 **你的 Star持续更新的动力！💪**
 
-Made with ❤️ by Yang-505
+Made with ❤️ by S-Trespassing
 
 </div>
 
