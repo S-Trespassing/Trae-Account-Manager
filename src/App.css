@@ -514,6 +514,9 @@ body {
   align-items: center;
   gap: var(--space-sm);
   box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  word-break: keep-all;
 }
 
 .add-btn:hover {
@@ -529,6 +532,7 @@ body {
 .header-btn {
   display: flex;
   align-items: center;
+  flex-wrap: nowrap;
   gap: var(--space-sm);
   padding: 10px 16px;
   border: 1px solid var(--border);
@@ -537,6 +541,8 @@ body {
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
+  white-space: nowrap;
+  word-break: keep-all;
   cursor: pointer;
   transition: all var(--transition);
 }
@@ -699,6 +705,7 @@ body {
 .batch-btn {
   display: flex;
   align-items: center;
+  flex-wrap: nowrap;
   gap: 6px;
   padding: 8px 14px;
   border: 1px solid var(--border);
@@ -707,6 +714,8 @@ body {
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
+  white-space: nowrap;
+  word-break: keep-all;
   cursor: pointer;
   transition: all var(--transition);
 }

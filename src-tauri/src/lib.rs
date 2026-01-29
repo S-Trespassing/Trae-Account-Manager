@@ -681,7 +681,16 @@ async fn quick_register(app: AppHandle, show_window: bool, state: State<'_, AppS
 
     let _ = webview.close();
     let mut manager = state.account_manager.lock().await;
-    let account = manager.add_account(cookies, Some(password)).await.map_err(ApiError::from)?;
+    let mut account = manager.add_account(cookies, Some(password)).await.map_err(ApiError::from)?;
+    let needs_email_override = account.email.trim().is_empty()
+        || account.email.contains('*')
+        || !account.email.contains('@');
+    if needs_email_override {
+        manager
+            .update_account_email(&account.id, email.clone())
+            .map_err(ApiError::from)?;
+        account = manager.get_account(&account.id).map_err(ApiError::from)?;
+    }
     if !show_window {
         emit_quick_register_notice(&app, "quick_register_done", "导入成功");
     }
