@@ -119,21 +119,6 @@ export function DetailModal({ isOpen, onClose, account, usage, onUpdateCredentia
     </svg>
   );
 
-  const EditHint = () => (
-    <span style={{ 
-      fontSize: '11px', 
-      color: 'var(--text-muted)', 
-      fontWeight: 'normal',
-      marginLeft: '8px',
-      opacity: 0.8,
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: '2px'
-    }}>
-      (双击编辑)
-    </span>
-  );
-
   return (
     <div className="modal-overlay" onClick={handleClose}>
       <div className="modal-content detail-modal" onClick={(e) => e.stopPropagation()}>

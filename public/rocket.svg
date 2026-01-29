@@ -1,5 +1,34 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-  <polygon points="12 2 2 7 12 12 22 7 12 2" />
-  <polyline points="2 17 12 22 22 17" />
-  <polyline points="2 12 12 17 22 12" />
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- Definitions for gradients -->
+    <defs>
+        <linearGradient id="bodyGradient" x1="12" y1="2" x2="12" y2="18" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#818cf8"/> <!-- Indigo-400 -->
+            <stop offset="100%" stop-color="#4f46e5"/> <!-- Indigo-600 -->
+        </linearGradient>
+        <linearGradient id="flameGradient" x1="12" y1="18" x2="12" y2="23" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#fbbf24"/> <!-- Amber-400 -->
+            <stop offset="100%" stop-color="#ef4444"/> <!-- Red-500 -->
+        </linearGradient>
+    </defs>
+
+    <!-- Planet/Orbit Ring for Cosmic Feel -->
+    <circle cx="12" cy="12" r="9" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3 3" opacity="0.6"/>
+    <circle cx="19" cy="5" r="1" fill="#a5b4fc" opacity="0.8">
+        <animate attributeName="opacity" values="0.8;0.2;0.8" dur="3s" repeatCount="indefinite" />
+    </circle>
+    <circle cx="5" cy="19" r="0.5" fill="#a5b4fc" opacity="0.6"/>
+
+    <!-- Rocket Body -->
+    <path d="M12 2C12 2 16 8 16 13V16L18 18H6L8 16V13C8 8 12 2 12 2Z" fill="url(#bodyGradient)" stroke="#312e81" stroke-width="1.5" stroke-linejoin="round"/>
+
+    <!-- Tech Window -->
+    <circle cx="12" cy="10" r="2.5" fill="#e0e7ff" stroke="#312e81" stroke-width="1"/>
+    <rect x="11.5" y="9.5" width="1" height="1" fill="#312e81" rx="0.5"/>
+    
+    <!-- Flames -->
+    <path d="M12 18V22" stroke="url(#flameGradient)" stroke-width="2" stroke-linecap="round">
+        <animate attributeName="d" values="M12 18V22;M12 18V21;M12 18V22" dur="0.5s" repeatCount="indefinite" />
+    </path>
+    <path d="M10 19L9 21" stroke="url(#flameGradient)" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M14 19L15 21" stroke="url(#flameGradient)" stroke-width="1.5" stroke-linecap="round"/>
 </svg>

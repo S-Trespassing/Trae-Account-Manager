@@ -361,16 +361,29 @@ body {
   font-size: 24px;
 }
 
+/* Logo Styles */
 .logo-icon-img {
-  width: 24px;
-  height: 24px;
+  width: 50px;
+  height: 50px;
   display: block;
 }
 
-.logo-text {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text-primary);
+.about-logo {
+  width: 80px;
+  height: 80px;
+  margin-bottom: 16px;
+  display: block;
+}
+
+/* 核心圆圈颜色：默认为深紫色 */
+.logo-core {
+  fill: rgb(60, 0, 120);
+  transition: fill 0.3s ease;
+}
+
+/* 绿色模式：在绿色背景下，将核心颜色改为深绿色 */
+[data-theme='green'] .logo-core {
+  fill: #022c22; /* 使用主题背景色，或者比背景更深的绿色 */
 }
 
 .sidebar-nav {
@@ -2503,8 +2516,8 @@ body {
 }
 
 .about-logo {
-  width: 64px;
-  height: 64px;
+  width: 80px;
+  height: 80px;
   margin-bottom: 16px;
   display: block;
 }

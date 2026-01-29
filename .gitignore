@@ -61,8 +61,17 @@ temp_repo/
 # Application data (optional, uncomment if you don't want to track)
 # *.db
 # *.sqlite
+accounts.txt
 
 # Env files
 .env
 .env.*
 !.env.example
+
+# Scripts (Python helper scripts)
+scripts/
+__pycache__/
+*.py[cod]
+
+# Trae Scripts
+trae_scripts/

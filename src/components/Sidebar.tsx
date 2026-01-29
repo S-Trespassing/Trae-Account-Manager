@@ -26,9 +26,10 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
           strokeLinecap="round"
           strokeLinejoin="round"
         >
-          <polygon points="12 2 2 7 12 12 22 7 12 2" />
-          <polyline points="2 17 12 22 22 17" />
-          <polyline points="2 12 12 17 22 12" />
+          <ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(0 12 12)" strokeOpacity="0.4" />
+          <ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(60 12 12)" strokeOpacity="0.4" />
+          <ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(120 12 12)" strokeOpacity="0.4" />
+          <circle cx="12" cy="12" r="3.3" className="logo-core" stroke="none" />
         </svg>
         <span className="logo-text">Trae Account Manager</span>
       </div>
