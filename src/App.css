@@ -368,6 +368,12 @@ body {
   display: block;
 }
 
+.logo-text {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
 .about-logo {
   width: 80px;
   height: 80px;
@@ -375,16 +381,20 @@ body {
   display: block;
 }
 
-/* 核心圆圈颜色：默认为深紫色 */
-.logo-core {
-  fill: rgb(60, 0, 120);
-  transition: fill 0.3s ease;
+/* 核心圆圈颜色（现改为层叠描边） */
+.logo-stroke {
+  /* 默认：明亮的靛蓝色，在浅色主题下清晰可见 */
+  stroke: rgb(99, 102, 241); /* #6366f1 (Indigo-500) */
+  transition: stroke 0.3s ease;
 }
 
-/* 绿色模式：在绿色背景下，将核心颜色改为深绿色 */
-[data-theme='green'] .logo-core {
-  fill: #022c22; /* 使用主题背景色，或者比背景更深的绿色 */
+/* 绿色模式：改为白色，确保在深绿色背景下对比度 */
+[data-theme='green'] .logo-stroke {
+  stroke: #ffffff;
 }
+
+/* 暗色模式：如果您的应用有其他暗色主题，建议使用较亮的颜色 */
+/* :root[class~="dark"] .logo-stroke { stroke: #a5b4fc; } */
 
 .sidebar-nav {
   padding: 4px;

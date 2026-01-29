@@ -14,10 +14,7 @@ export function About() {
           strokeLinejoin="round"
           style={{ margin: '0 auto 16px' }}
         >
-          <ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(0 12 12)" strokeOpacity="0.4" />
-          <ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(60 12 12)" strokeOpacity="0.4" />
-          <ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(120 12 12)" strokeOpacity="0.4" />
-          <circle cx="12" cy="12" r="3.3" className="logo-core" stroke="none" />
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" className="logo-stroke" />
         </svg>
         <h3>Trae Account Manager</h3>
         <div className="about-version" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>

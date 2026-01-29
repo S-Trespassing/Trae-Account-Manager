@@ -1,8 +1,3 @@
 <svg width="512" height="512" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <g stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(0 12 12)" stroke-opacity="0.4" />
-    <ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(60 12 12)" stroke-opacity="0.4" />
-    <ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(120 12 12)" stroke-opacity="0.4" />
-  </g>
-  <circle cx="12" cy="12" r="3.3" fill="rgb(60, 0, 120)" />
+  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
