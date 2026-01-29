@@ -89,6 +89,13 @@ struct BrowserLoginSession {
     cancel: oneshot::Receiver<()>,
     window_close: oneshot::Receiver<()>,
     webview: WebviewWindow,
+    credentials: Arc<StdMutex<BrowserLoginCredentials>>,
+}
+
+#[derive(Debug, Default, Clone)]
+struct BrowserLoginCredentials {
+    email: Option<String>,
+    password: Option<String>,
 }
 
 /// 错误类型
@@ -704,6 +711,182 @@ fn build_browser_login_script(port: u16) -> String {
 
   const callback = "http://127.0.0.1:__PORT__/callback";
   let loginTriggered = false;
+  const normalize = (text) => (text || "").toLowerCase();
+  const STORAGE_EMAIL_KEY = "__trae_login_email";
+  const STORAGE_PASSWORD_KEY = "__trae_login_password";
+  let capturedEmail = "";
+  let capturedPassword = "";
+  let lastSentEmail = "";
+  let lastSentPassword = "";
+  const boundInputs = new WeakSet();
+  try {
+    capturedEmail = sessionStorage.getItem(STORAGE_EMAIL_KEY) || "";
+    capturedPassword = sessionStorage.getItem(STORAGE_PASSWORD_KEY) || "";
+  } catch {}
+  const captureEmail = (value) => {
+    const next = (value || "").trim();
+    if (next) {
+      capturedEmail = next;
+      try {
+        sessionStorage.setItem(STORAGE_EMAIL_KEY, capturedEmail);
+      } catch {}
+    }
+  };
+  const capturePassword = (value) => {
+    const next = (value || "").toString();
+    if (next) {
+      capturedPassword = next;
+      try {
+        sessionStorage.setItem(STORAGE_PASSWORD_KEY, capturedPassword);
+      } catch {}
+    }
+  };
+  const maybeCapture = (el) => {
+    if (!el || !el.getAttribute) return;
+    const type = normalize(el.getAttribute("type") || "");
+    const name = normalize(el.getAttribute("name") || "");
+    const autocomplete = normalize(el.getAttribute("autocomplete") || "");
+    const placeholder = normalize(el.getAttribute("placeholder") || "");
+    const value = typeof el.value === "string" ? el.value : "";
+    const trimmedValue = value.trim();
+    if (type === "password" || name.includes("password") || autocomplete.includes("password") || placeholder.includes("password")) {
+      capturePassword(value);
+    }
+    if (
+      type === "email" ||
+      name.includes("email") ||
+      name.includes("account") ||
+      autocomplete.includes("email") ||
+      placeholder.includes("email") ||
+      placeholder.includes("邮箱")
+    ) {
+      captureEmail(value);
+    } else if (!capturedEmail && trimmedValue.includes("@")) {
+      captureEmail(trimmedValue);
+    }
+  };
+  const bindInput = (input) => {
+    if (!input || boundInputs.has(input) || !input.addEventListener) return;
+    boundInputs.add(input);
+    const handler = () => {
+      maybeCapture(input);
+      syncCredentials();
+    };
+    input.addEventListener("input", handler);
+    input.addEventListener("change", handler);
+    input.addEventListener("blur", handler);
+  };
+  const applyCredentialField = (key, value) => {
+    if (typeof value !== "string") return;
+    const lower = normalize(key);
+    if (lower.includes("email")) {
+      captureEmail(value);
+    }
+    if (
+      lower.includes("password") ||
+      lower.includes("passwd") ||
+      lower === "pwd" ||
+      lower.endsWith("password")
+    ) {
+      capturePassword(value);
+    }
+  };
+  const extractCredentialsFromBody = (body) => {
+    if (!body) return;
+    try {
+      if (typeof body === "string") {
+        const trimmed = body.trim();
+        if (!trimmed) return;
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+          const data = JSON.parse(trimmed);
+          if (data && typeof data === "object") {
+            Object.keys(data).forEach((key) => applyCredentialField(key, data[key]));
+          }
+        } else {
+          const params = new URLSearchParams(trimmed);
+          params.forEach((value, key) => applyCredentialField(key, value));
+        }
+        syncCredentials();
+        return;
+      }
+      if (body instanceof URLSearchParams) {
+        body.forEach((value, key) => applyCredentialField(key, value));
+        syncCredentials();
+        return;
+      }
+      if (typeof FormData !== "undefined" && body instanceof FormData) {
+        body.forEach((value, key) => {
+          if (typeof value === "string") {
+            applyCredentialField(key, value);
+          }
+        });
+        syncCredentials();
+        return;
+      }
+    } catch {}
+  };
+  const hookValueSetter = () => {
+    try {
+      if (window.__traeValueHooked) return;
+      if (!window.HTMLInputElement) return;
+      const proto = HTMLInputElement.prototype;
+      const desc = Object.getOwnPropertyDescriptor(proto, "value");
+      if (!desc || !desc.set || !desc.get) return;
+      Object.defineProperty(proto, "value", {
+        get: function() {
+          return desc.get.call(this);
+        },
+        set: function(val) {
+          desc.set.call(this, val);
+          try {
+            maybeCapture(this);
+            syncCredentials();
+          } catch {}
+        }
+      });
+      window.__traeValueHooked = true;
+    } catch {}
+  };
+  const getInputFromEvent = (event) => {
+    const path = typeof event.composedPath === "function" ? event.composedPath() : (event.path || []);
+    if (path && path.length) {
+      for (const node of path) {
+        if (node && node.tagName && node.tagName.toLowerCase() === "input") {
+          return node;
+        }
+      }
+    }
+    return event.target;
+  };
+  const scanRoot = (root) => {
+    if (!root) return;
+    try {
+      const inputs = root.querySelectorAll ? root.querySelectorAll("input") : [];
+      if (inputs && inputs.length) {
+        inputs.forEach((input) => {
+          maybeCapture(input);
+          bindInput(input);
+        });
+      }
+      const elements = root.querySelectorAll ? root.querySelectorAll("*") : [];
+      if (elements && elements.length) {
+        elements.forEach((el) => {
+          if (el && el.shadowRoot) {
+            scanRoot(el.shadowRoot);
+          }
+          if (el && el.tagName && el.tagName.toLowerCase() === "iframe") {
+            try {
+              scanRoot(el.contentDocument || (el.contentWindow && el.contentWindow.document));
+            } catch {}
+          }
+        });
+      }
+    } catch {}
+  };
+  const scanInputs = () => {
+    scanRoot(document);
+    syncCredentials();
+  };
   const tryAcceptCookies = () => {
     const cookieSelectors = [
       'button.cm__btn',
@@ -744,29 +927,46 @@ fn build_browser_login_script(port: u16) -> String {
     }
     return false;
   };
-  const sendToken = (token) => {
-    if (!token || !loginTriggered) return;
-    const url = callback + "?token=" + encodeURIComponent(token);
+  const sendPayload = (payload) => {
+    const params = new URLSearchParams();
+    Object.keys(payload || {}).forEach((key) => {
+      const value = payload[key];
+      if (value === undefined || value === null || value === "") return;
+      params.append(key, value);
+    });
+    if (capturedEmail) params.append("email", capturedEmail);
+    if (capturedPassword) params.append("password", capturedPassword);
+    const url = callback + "?" + params.toString();
     if (navigator.sendBeacon) {
       navigator.sendBeacon(url);
     } else {
       fetch(url, { mode: "no-cors" });
     }
   };
+  const syncCredentials = () => {
+    if (!capturedEmail && !capturedPassword) return;
+    if (capturedEmail === lastSentEmail && capturedPassword === lastSentPassword) return;
+    lastSentEmail = capturedEmail;
+    lastSentPassword = capturedPassword;
+    sendPayload({ state: "credentials" });
+  };
+  const sendToken = (token) => {
+    if (!token) return;
+    loginTriggered = true;
+    sendPayload({ token });
+  };
   const sendState = (state, href) => {
-    if (!state || !loginTriggered) return;
-    const url = callback + "?state=" + encodeURIComponent(state) + "&href=" + encodeURIComponent(href || "");
-    if (navigator.sendBeacon) {
-      navigator.sendBeacon(url);
-    } else {
-      fetch(url, { mode: "no-cors" });
-    }
+    if (!state) return;
+    loginTriggered = true;
+    sendPayload({ state, href: href || "" });
   };
   const isLoginCompleteUrl = (href) => {
     if (!href) return false;
     const lower = href.toLowerCase();
     if (lower.includes("/login")) return false;
     if (lower.includes("passport")) return false;
+    if (lower.includes("sign-up") || lower.includes("signup") || lower.includes("register")) return false;
+    if (lower.includes("terms") || lower.includes("privacy")) return false;
     return true;
   };
   const parseToken = (data) => {
@@ -784,7 +984,6 @@ fn build_browser_login_script(port: u16) -> String {
     loginTriggered = true;
   };
   const tryFetch = async () => {
-    if (!loginTriggered) return;
     try {
       const res = await fetch("https://api-sg-central.trae.ai/cloudide/api/v3/common/GetUserToken", {
         method: "POST",
@@ -799,6 +998,15 @@ fn build_browser_login_script(port: u16) -> String {
   const hookFetch = () => {
     const orig = window.fetch;
     window.fetch = async (...args) => {
+      try {
+        const input = args[0];
+        const init = args[1];
+        if (init && init.body) {
+          extractCredentialsFromBody(init.body);
+        } else if (input && typeof input === "object" && typeof input.clone === "function") {
+          input.clone().text().then((text) => extractCredentialsFromBody(text)).catch(() => {});
+        }
+      } catch {}
       const res = await orig(...args);
       try {
         if (typeof res.url === "string" && res.url.includes("GetUserToken")) {
@@ -819,6 +1027,9 @@ fn build_browser_login_script(port: u16) -> String {
       return origOpen.apply(this, [method, url, ...rest]);
     };
     XMLHttpRequest.prototype.send = function(body) {
+      try {
+        extractCredentialsFromBody(body);
+      } catch {}
       this.addEventListener("load", function() {
         try {
           if ((this.__trae_url || "").includes("GetUserToken")) {
@@ -834,15 +1045,52 @@ fn build_browser_login_script(port: u16) -> String {
 
   hookFetch();
   hookXHR();
+  hookValueSetter();
   tryFetch();
   tryAcceptCookies();
+  scanInputs();
   setInterval(tryFetch, 3000);
   setInterval(tryAcceptCookies, 1500);
-  document.addEventListener("submit", () => markLoginTriggered(), true);
-  document.addEventListener("input", (event) => {
+  setInterval(scanInputs, 2000);
+  try {
+    const observer = new MutationObserver(() => scanInputs());
+    const target = document.documentElement || document;
+    observer.observe(target, { childList: true, subtree: true });
+  } catch {}
+  document.addEventListener("submit", () => {
+    scanInputs();
+    markLoginTriggered();
+  }, true);
+  syncCredentials();
+  document.addEventListener("click", (event) => {
     const target = event.target;
+    if (!target || !target.closest) return;
+    scanInputs();
+    const button = target.closest("button, [role='button'], a, input[type='button'], input[type='submit']");
+    if (!button) return;
+    const text = normalize(button.innerText || button.textContent || button.getAttribute("aria-label"));
+    if (
+      text.includes("log in") ||
+      text.includes("login") ||
+      text.includes("sign in") ||
+      text.includes("sign-in") ||
+      text.includes("github") ||
+      text.includes("google") ||
+      text.includes("continue") ||
+      text.includes("登录") ||
+      text.includes("继续") ||
+      text.includes("授权")
+    ) {
+      markLoginTriggered();
+    }
+  }, true);
+  document.addEventListener("input", (event) => {
+    const target = getInputFromEvent(event);
     if (!target) return;
-    if (target.type === "password") markLoginTriggered();
+    maybeCapture(target);
+    syncCredentials();
+    const targetType = target.getAttribute ? normalize(target.getAttribute("type") || "") : "";
+    if (targetType === "password") markLoginTriggered();
   }, true);
   let lastHref = location.href;
   let stateSent = false;
@@ -911,16 +1159,34 @@ async fn start_browser_login(app: AppHandle, state: State<'_, AppState>) -> Resu
     let token_sender = Arc::new(StdMutex::new(Some(token_tx)));
     let shutdown_sender = Arc::new(StdMutex::new(Some(shutdown_tx)));
     let window_close_sender = Arc::new(StdMutex::new(Some(window_close_tx)));
+    let credentials = Arc::new(StdMutex::new(BrowserLoginCredentials::default()));
 
     let token_sender_route = token_sender.clone();
     let shutdown_sender_route = shutdown_sender.clone();
+    let credentials_route = credentials.clone();
     let route = warp::path("callback")
         .and(warp::query::<HashMap<String, String>>())
         .map(move |query: HashMap<String, String>| {
-            println!("[browser-login] callback query: {:?}", query);
+            let mut log_query = query.clone();
+            if log_query.contains_key("password") {
+                log_query.insert("password".to_string(), "***".to_string());
+            }
+            println!("[browser-login] callback query: {:?}", log_query);
             let token = query.get("token").cloned().unwrap_or_default();
             let state = query.get("state").cloned().unwrap_or_default();
             let href = query.get("href").cloned().unwrap_or_default();
+            let email = query.get("email").cloned().unwrap_or_default();
+            let password = query.get("password").cloned().unwrap_or_default();
+
+            if !email.trim().is_empty() || !password.is_empty() {
+                let mut creds = credentials_route.lock().unwrap();
+                if !email.trim().is_empty() {
+                    creds.email = Some(email.trim().to_string());
+                }
+                if !password.is_empty() {
+                    creds.password = Some(password);
+                }
+            }
             if !token.is_empty() {
                 if let Some(tx) = token_sender_route.lock().unwrap().take() {
                     let _ = tx.send(token);
@@ -993,6 +1259,7 @@ async fn start_browser_login(app: AppHandle, state: State<'_, AppState>) -> Resu
         cancel: cancel_rx,
         window_close: window_close_rx,
         webview,
+        credentials,
     });
     *state.browser_login_cancel.lock().await = Some(cancel_tx);
 
@@ -1065,11 +1332,48 @@ async fn finish_browser_login(state: State<'_, AppState>) -> Result<Account> {
     } else {
         token
     };
+
+    let mut credentials = session.credentials.lock().unwrap().clone();
+    if credentials.email.as_deref().unwrap_or("").trim().is_empty()
+        && credentials.password.as_deref().unwrap_or("").is_empty()
+    {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < deadline {
+            let snapshot = session.credentials.lock().unwrap().clone();
+            if !snapshot.email.as_deref().unwrap_or("").trim().is_empty()
+                || !snapshot.password.as_deref().unwrap_or("").is_empty()
+            {
+                credentials = snapshot;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
+
     let _ = session.webview.close();
     let cookies = if cookies.is_empty() { None } else { Some(cookies) };
 
     let mut manager = state.account_manager.lock().await;
-    manager.add_account_by_token(token, cookies, None).await.map_err(ApiError::from)
+    let mut account = manager
+        .add_account_by_token(token, cookies, None)
+        .await
+        .map_err(ApiError::from)?;
+
+    let email = credentials.email.unwrap_or_default();
+    let password = credentials.password.unwrap_or_default();
+    let has_email = !email.trim().is_empty();
+    let has_password = !password.is_empty();
+    if has_email || has_password {
+        account = manager
+            .update_account_profile(
+                &account.id,
+                if has_email { Some(email) } else { None },
+                if has_password { Some(password) } else { None },
+            )
+            .map_err(ApiError::from)?;
+    }
+
+    Ok(account)
 }
 
 #[tauri::command]
