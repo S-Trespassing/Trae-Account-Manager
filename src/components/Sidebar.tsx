@@ -46,7 +46,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
 
       <div className="sidebar-footer">
         <ThemeSwitcher />
-        <span className="version">v2.0.0</span>
+        <span className="version">v2.0.1</span>
       </div>
     </aside>
   );
