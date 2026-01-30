@@ -31,15 +31,6 @@
 
 Trae Account Manager 是一款专为 Trae IDE 用户打造的多账号管理工具。通过本工具，你可以轻松管理多个 Trae 账号，一键切换账号，实时查看使用量，让你的 Trae IDE 使用体验更加便捷高效！
 
-### 🎯 为什么选择 Trae Account Manager？
-
-- 🔄 **一键切换账号** - 自动关闭 Trae IDE，切换账号后自动重新打开
-- 📊 **实时使用量监控** - 随时查看每个账号的 Token 使用情况
-- 🎨 **现代化界面** - 简洁美观的用户界面，操作流畅
-- 🔒 **安全可靠** - 本地存储，数据安全有保障
-- ⚡ **高效便捷** - 支持批量导入导出，快速管理多个账号
-- 🛠️ **功能丰富** - 机器码管理、使用记录查询、账号详情查看
-
 ---
 
 ## ⚠️ 免责声明
@@ -67,9 +58,8 @@ Trae Account Manager 是一款专为 Trae IDE 用户打造的多账号管理工�
 
 ---
 
-## ✨ 功能特性
+## ✨ 功能展示
 
-### 🎭 账号管理
 <img width="1644" height="1173" alt="tmp1446" src="https://github.com/user-attachments/assets/e1df5cbf-17c8-431a-9c24-b984bf410657" />
 <img width="1644" height="1173" alt="tmp4942" src="https://github.com/user-attachments/assets/f862bda8-1d1d-4c04-98dc-f64dd06b0c4d" />
 <img width="1504" height="1097" alt="tmp64A6" src="https://github.com/user-attachments/assets/31d0e581-4174-47a4-b048-579a8ec1aad3" />
@@ -86,7 +76,6 @@ Trae Account Manager 是一款专为 Trae IDE 用户打造的多账号管理工�
 
 - Windows 10/11
 - Trae IDE 已安装
-- Node.js 16+ (开发环境)
 
 ### 📥 下载安装
 
