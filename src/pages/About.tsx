@@ -19,7 +19,7 @@ export function About() {
         <h3>Trae Account Manager</h3>
         <div className="about-version" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
           <div 
-            onClick={() => openUrl('https://github.com/S-Trespassing/Trae-Account-Manager-Pro')}
+            onClick={() => openUrl('https://github.com/S-Trespassing/Trae-Account-Manager')}
             style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--text-secondary)' }}
             title="GitHub"
             onMouseEnter={(e) => e.currentTarget.style.color = 'var(--accent)'}

@@ -15,6 +15,7 @@ use std::time::{Duration, Instant};
 
 use reqwest::Client;
 use serde_json::Value;
+use tokio::io::AsyncWriteExt;
 use tokio::sync::{oneshot, Mutex};
 use tauri::{AppHandle, Emitter, Manager, State, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri::webview::PageLoadEvent;
@@ -161,6 +162,88 @@ async fn update_settings(settings: AppSettings, state: State<'_, AppState>) -> R
     }
     save_settings_to_disk(&settings).map_err(ApiError::from)?;
     Ok(settings)
+}
+
+/// 下载并运行更新安装包（Windows: .msi）
+#[tauri::command]
+async fn download_and_run_installer(url: String) -> Result<String> {
+    let url = url.trim().to_string();
+    if url.is_empty() {
+        return Err(anyhow::anyhow!("安装包链接为空").into());
+    }
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err(anyhow::anyhow!("安装包链接无效").into());
+    }
+
+    // Prefer keeping the original filename, but avoid collisions.
+    let raw_filename = url
+        .split('/')
+        .last()
+        .unwrap_or("TraeAccountManagerUpdate.msi")
+        .split('?')
+        .next()
+        .unwrap_or("TraeAccountManagerUpdate.msi")
+        .trim();
+    let filename = if raw_filename.is_empty() {
+        "TraeAccountManagerUpdate.msi"
+    } else {
+        raw_filename
+    };
+
+    let mut dest_path = std::env::temp_dir();
+    dest_path.push(format!(
+        "trae-account-manager-update-{}-{}",
+        Uuid::new_v4(),
+        filename
+    ));
+
+    let client = Client::builder()
+        .user_agent("Trae Account Manager Updater")
+        .timeout(Duration::from_secs(60 * 30))
+        .build()
+        .map_err(|e| ApiError::from(anyhow::Error::new(e)))?;
+
+    let mut response = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| ApiError::from(anyhow::Error::new(e)))?;
+    if !response.status().is_success() {
+        return Err(anyhow::anyhow!("下载失败: {}", response.status()).into());
+    }
+
+    let mut file = tokio::fs::File::create(&dest_path)
+        .await
+        .map_err(|e| ApiError::from(anyhow::Error::new(e)))?;
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|e| ApiError::from(anyhow::Error::new(e)))?
+    {
+        file.write_all(&chunk)
+            .await
+            .map_err(|e| ApiError::from(anyhow::Error::new(e)))?;
+    }
+    file.flush()
+        .await
+        .map_err(|e| ApiError::from(anyhow::Error::new(e)))?;
+    drop(file);
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("msiexec")
+            .arg("/i")
+            .arg(dest_path.to_string_lossy().to_string())
+            .spawn()
+            .map_err(|e| anyhow::anyhow!("无法启动安装程序: {}", e))?;
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        open::that(&dest_path).map_err(|e| anyhow::anyhow!("无法打开安装程序: {}", e))?;
+    }
+
+    Ok(dest_path.to_string_lossy().to_string())
 }
 
 const MAIL_API_BASE: &str = "https://api.mail.cx/api/v1";
@@ -1840,6 +1923,7 @@ pub fn run() {
             add_account_by_email,
             get_settings,
             update_settings,
+            download_and_run_installer,
             quick_register,
             start_browser_login,
             finish_browser_login,

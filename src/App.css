@@ -2853,6 +2853,95 @@ body {
   background: var(--accent-hover);
 }
 
+/* Update Modal */
+.update-modal {
+  background: var(--bg-secondary);
+  border-radius: 16px;
+  padding: 28px;
+  width: 92%;
+  max-width: 520px;
+  text-align: center;
+  animation: modal-pop-in 0.2s ease-out;
+}
+
+.update-icon {
+  font-size: 42px;
+  margin-bottom: 14px;
+}
+
+.update-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.update-message {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+
+.update-notes {
+  max-height: 200px;
+  overflow: auto;
+  text-align: left;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0 0 18px;
+}
+
+.update-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.update-btn {
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.update-btn.secondary:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.update-btn.primary {
+  background: var(--gradient-accent);
+  border-color: transparent;
+  color: var(--text-inverse);
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.25);
+}
+
+.update-btn.primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(99, 102, 241, 0.35);
+}
+
+.update-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* Add Account Modal Form Sections */
 .add-account-modal {
   max-width: 520px;

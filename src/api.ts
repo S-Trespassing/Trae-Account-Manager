@@ -46,6 +46,11 @@ export async function cancelBrowserLogin(): Promise<void> {
   return invoke("cancel_browser_login");
 }
 
+// 下载并运行更新安装包（Windows: .msi）
+export async function downloadAndRunInstaller(url: string): Promise<string> {
+  return invokeNetwork("download_and_run_installer", { url });
+}
+
 // 删除账号
 export async function removeAccount(accountId: string): Promise<void> {
   return invoke("remove_account", { accountId });

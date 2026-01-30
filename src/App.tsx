@@ -11,6 +11,7 @@ import { DetailModal } from "./components/DetailModal";
 import { AccountLoginModal } from "./components/AccountLoginModal";
 import { Toast, ToastMessage } from "./components/Toast";
 import { ConfirmModal } from "./components/ConfirmModal";
+import { UpdateModal } from "./components/UpdateModal";
 import { Dashboard } from "./pages/Dashboard";
 import { Stats } from "./pages/Stats";
 import { Settings } from "./pages/Settings";
@@ -26,7 +27,8 @@ interface AccountWithUsage extends AccountBrief {
 
 type ViewMode = "grid" | "list";
 const USAGE_CACHE_KEY = "trae_usage_cache_v1";
-const UPDATE_CHECK_URL = "https://api.github.com/repos/S-Trespassing/Trae-Account-Manager-Pro/releases/latest";
+const UPDATE_CHECK_URL = "https://api.github.com/repos/S-Trespassing/Trae-Account-Manager/releases/latest";
+const UPDATE_IGNORE_KEY = "trae_update_ignore_version_v1";
 
 const normalizeVersion = (value: string) => value.trim().replace(/^v/i, "");
 const parseVersion = (value: string) =>
@@ -46,6 +48,13 @@ const compareVersions = (a: string, b: string) => {
   return 0;
 };
 
+type UpdateInfo = {
+  currentVersion: string;
+  latestVersion: string;
+  installerUrl: string | null;
+  notes?: string;
+};
+
 function App() {
   const [accounts, setAccounts] = useState<AccountWithUsage[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -60,6 +69,10 @@ function App() {
 
   // Toast 通知状态
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  // 更新提示弹窗状态
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updating, setUpdating] = useState(false);
 
   // 确认弹窗状态
   const [confirmModal, setConfirmModal] = useState<{
@@ -127,6 +140,7 @@ function App() {
 
   const checkForUpdates = useCallback(async () => {
     if (!navigator.onLine) return;
+    if (updateInfo) return;
     try {
       const response = await fetch(UPDATE_CHECK_URL, {
         headers: {
@@ -136,18 +150,78 @@ function App() {
       if (!response.ok) {
         return;
       }
-      const data = (await response.json()) as { tag_name?: string; name?: string };
+      const data = (await response.json()) as {
+        tag_name?: string;
+        name?: string;
+        body?: string;
+        assets?: Array<{ name?: string; browser_download_url?: string }>;
+      };
       const latestTag = String(data.tag_name || data.name || "").trim();
       if (!latestTag) return;
       const currentVersion = await getVersion();
       if (!currentVersion) return;
       if (compareVersions(latestTag, currentVersion) > 0) {
-        addToast("info", `发现新版本 ${latestTag}，可前往 GitHub 下载更新`, 6000, "update-available");
+        try {
+          const ignoredVersion = localStorage.getItem(UPDATE_IGNORE_KEY) || "";
+          if (
+            ignoredVersion &&
+            normalizeVersion(ignoredVersion) === normalizeVersion(latestTag)
+          ) {
+            return;
+          }
+        } catch {}
+
+        const assets = Array.isArray(data.assets) ? data.assets : [];
+        const msiAsset = assets.find((asset) =>
+          String(asset.name || "")
+            .toLowerCase()
+            .endsWith(".msi")
+        );
+        const installerUrl = String(msiAsset?.browser_download_url || "").trim() || null;
+        const notes = typeof data.body === "string" ? data.body.trim() : "";
+        setUpdateInfo({
+          currentVersion,
+          latestVersion: latestTag,
+          installerUrl,
+          notes: notes ? notes.slice(0, 2000) : undefined,
+        });
       }
     } catch {
       // silent on auto check
     }
-  }, [addToast]);
+  }, [updateInfo]);
+
+  const handleUpdateLater = useCallback(() => {
+    if (updating) return;
+    setUpdateInfo(null);
+  }, [updating]);
+
+  const handleIgnoreUpdateVersion = useCallback(() => {
+    if (!updateInfo || updating) return;
+    try {
+      localStorage.setItem(UPDATE_IGNORE_KEY, normalizeVersion(updateInfo.latestVersion));
+    } catch {}
+    addToast("info", `已忽略版本 ${updateInfo.latestVersion}`, 3000, "update-ignored");
+    setUpdateInfo(null);
+  }, [addToast, updateInfo, updating]);
+
+  const handleOneClickUpdate = useCallback(async () => {
+    if (!updateInfo || updating) return;
+    if (!updateInfo.installerUrl) {
+      addToast("error", "未找到可用的 Windows 安装包（.msi），请前往 GitHub 手动下载。", 5000, "update-missing-msi");
+      return;
+    }
+    setUpdating(true);
+    try {
+      await api.downloadAndRunInstaller(updateInfo.installerUrl);
+      addToast("success", "已启动安装程序，请按提示完成更新。", 6000, "update-started");
+      setUpdateInfo(null);
+    } catch (err: any) {
+      addToast("error", err?.message || "更新失败，请稍后重试。");
+    } finally {
+      setUpdating(false);
+    }
+  }, [addToast, updateInfo, updating]);
 
   useEffect(() => {
     const handleOffline = () => {
@@ -911,6 +985,18 @@ function App() {
       )}
 
       {/* 右键菜单 */}
+      {/* 自动更新弹窗 */}
+      <UpdateModal
+        isOpen={!!updateInfo}
+        currentVersion={updateInfo?.currentVersion || ""}
+        latestVersion={updateInfo?.latestVersion || ""}
+        notes={updateInfo?.notes}
+        isBusy={updating}
+        onLater={handleUpdateLater}
+        onIgnore={handleIgnoreUpdateVersion}
+        onUpdate={handleOneClickUpdate}
+      />
+
       {contextMenu && (
         <ContextMenu
           x={contextMenu.x}
