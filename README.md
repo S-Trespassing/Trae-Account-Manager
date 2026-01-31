@@ -3,7 +3,7 @@
 <div align="center">
 
 ![Trae Account Manager](https://img.shields.io/badge/Trae-Account%20Manager-blue?style=for-the-badge)
-![Version](https://img.shields.io/badge/version-2.0.1-green?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.0.2-green?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-orange?style=for-the-badge)
 
