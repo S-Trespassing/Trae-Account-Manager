@@ -394,11 +394,122 @@ async fn wait_for_verification_code(client: &mut MailClient, timeout: Duration) 
     Err(anyhow::anyhow!("等待邮箱验证码超时"))
 }
 
-fn build_register_helper_script() -> String {
-    r#"(function() {
+fn build_register_helper_script(port: u16) -> String {
+    let script = r#"(function() {
   if (window.__traeAutoRegister) return;
 
+  const callback = "http://127.0.0.1:__PORT__/callback";
+  
+  const sendPayload = (payload) => {
+    const params = new URLSearchParams();
+    Object.keys(payload || {}).forEach((key) => {
+      const value = payload[key];
+      if (value === undefined || value === null || value === "") return;
+      params.append(key, value);
+    });
+    const url = callback + "?" + params.toString();
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon(url);
+    } else {
+      fetch(url, { mode: "no-cors" });
+    }
+  };
+
+  const sendLog = (msg) => {
+    // console.log("[TraeAuto]", msg);
+    sendPayload({ log: msg });
+  };
+
+  const parseToken = (data) => {
+    if (!data) return null;
+    return (
+      data.result?.token ||
+      data.result?.Token ||
+      data.Result?.token ||
+      data.Result?.Token ||
+      data.data?.token ||
+      data.Data?.Token ||
+      data.token ||
+      data.Token ||
+      null
+    );
+  };
+
+  const sendToken = (token, url) => {
+    if (!token) return;
+    sendLog("Found token: " + token.substring(0, 10) + "...");
+    sendPayload({ token, url: url || "" });
+  };
+
+  const hookFetch = () => {
+    const orig = window.fetch;
+    window.fetch = async (...args) => {
+      const url = args[0] instanceof Request ? args[0].url : args[0];
+      if (typeof url === "string" && (url.includes("GetUserToken") || url.includes("cloudide/api/v3"))) {
+          sendLog("Fetch request: " + url);
+      }
+      
+      const res = await orig(...args);
+      try {
+        const resUrl = res.url || "";
+        if (resUrl.includes("GetUserToken") || (typeof url === "string" && url.includes("GetUserToken"))) {
+          sendLog("Intercepted GetUserToken response from: " + resUrl);
+          const data = await res.clone().json();
+          const token = parseToken(data);
+          if (token) {
+              sendToken(token, resUrl || url);
+          } else {
+              sendLog("Parsed token is null from data: " + JSON.stringify(data).substring(0, 100));
+          }
+        }
+      } catch (e) {
+          sendLog("Error reading fetch response: " + e.message);
+      }
+      return res;
+    };
+  };
+
+  const hookXHR = () => {
+    const origOpen = XMLHttpRequest.prototype.open;
+    const origSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+      this.__trae_url = url;
+      if (typeof url === "string" && (url.includes("GetUserToken") || url.includes("cloudide/api/v3"))) {
+         sendLog("XHR open: " + url);
+      }
+      return origOpen.apply(this, [method, url, ...rest]);
+    };
+    XMLHttpRequest.prototype.send = function(body) {
+      this.addEventListener("load", function() {
+        try {
+          if ((this.__trae_url || "").includes("GetUserToken")) {
+            sendLog("Intercepted GetUserToken XHR load: " + this.__trae_url);
+            const data = JSON.parse(this.responseText);
+            const token = parseToken(data);
+            if (token) {
+                sendToken(token, this.__trae_url);
+            } else {
+                sendLog("Parsed token is null from XHR data");
+            }
+          }
+        } catch (e) {
+             sendLog("Error reading XHR response: " + e.message);
+        }
+      });
+      return origSend.apply(this, arguments);
+    };
+  };
+
+  try {
+      hookFetch();
+      hookXHR();
+      sendLog("Network hooks installed via initialization script");
+  } catch (e) {
+      sendLog("Failed to install hooks: " + e.message);
+  }
+
   const normalize = (text) => (text || "").toLowerCase();
+
   const setValue = (input, value) => {
     if (!input) return false;
     const proto = Object.getPrototypeOf(input);
@@ -647,18 +758,30 @@ fn build_register_helper_script() -> String {
     },
   };
   setInterval(tryAcceptCookies, 1500);
-})();"#.to_string()
+})();"#;
+    script.replace("__PORT__", &port.to_string())
 }
 
 async fn wait_for_token_with_cookies(webview: &WebviewWindow, timeout: Duration) -> anyhow::Result<String> {
     let start = Instant::now();
+    println!("[quick-register] Waiting for token with cookies...");
     while start.elapsed() < timeout {
-        let cookies = collect_trae_cookies(webview);
+        let cookies = collect_trae_cookies(webview, None);
         if !cookies.is_empty() {
+            println!("[quick-register] Found cookies (len: {}), trying to get token...", cookies.len());
             let mut client = TraeApiClient::new(&cookies)?;
-            if client.get_user_token().await.is_ok() {
-                return Ok(cookies);
+            match client.get_user_token().await {
+                Ok(_) => {
+                    println!("[quick-register] Successfully retrieved token with cookies");
+                    return Ok(cookies);
+                }
+                Err(e) => {
+                    println!("[quick-register] Failed to get token with cookies: {}", e);
+                    println!("[quick-register] Cookies used for request: {}", cookies);
+                }
             }
+        } else {
+             println!("[quick-register] No cookies found yet...");
         }
         tokio::time::sleep(Duration::from_secs(3)).await;
     }
@@ -676,10 +799,49 @@ async fn quick_register(app: AppHandle, show_window: bool, state: State<'_, AppS
     let password = generate_password();
     mail_client.set_email(email.clone());
 
+    let (token_tx, token_rx) = oneshot::channel::<(String, String)>();
+    let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+    let token_sender = Arc::new(StdMutex::new(Some(token_tx)));
+    let shutdown_sender = Arc::new(StdMutex::new(Some(shutdown_tx)));
+
+    let token_sender_route = token_sender.clone();
+    let shutdown_sender_route = shutdown_sender.clone();
+
+    let route = warp::path("callback")
+        .and(warp::query::<HashMap<String, String>>())
+        .map(move |query: HashMap<String, String>| {
+            if let Some(msg) = query.get("log") {
+                println!("[quick-register-js] {}", msg);
+                return warp::reply::html("ok".to_string());
+            }
+
+            let token = query.get("token").cloned().unwrap_or_default();
+            let url = query.get("url").cloned().unwrap_or_default();
+            
+             if !token.is_empty() {
+                if let Some(tx) = token_sender_route.lock().unwrap().take() {
+                    let _ = tx.send((token, url));
+                }
+                if let Some(tx) = shutdown_sender_route.lock().unwrap().take() {
+                    let _ = tx.send(());
+                }
+                warp::reply::html("已收到 Token，注册成功。".to_string())
+            } else {
+                warp::reply::html("未收到 Token".to_string())
+            }
+        });
+
+    let (addr, server) = warp::serve(route)
+        .bind_with_graceful_shutdown(([127, 0, 0, 1], 0), async move {
+            let _ = shutdown_rx.await;
+        });
+    tokio::spawn(server);
+
     let pending_completion: Arc<StdMutex<Option<(String, String)>>> = Arc::new(StdMutex::new(None));
     let pending_completion_onload = pending_completion.clone();
-    let helper_script = build_register_helper_script();
+    let helper_script = build_register_helper_script(addr.port());
     let helper_script_onload = helper_script.clone();
+    let helper_script_init = helper_script.clone();
     let email_onload = email.clone();
 
     if let Some(existing) = app.get_webview_window("trae-register") {
@@ -690,6 +852,7 @@ async fn quick_register(app: AppHandle, show_window: bool, state: State<'_, AppS
         .title("Trae 注册")
         .inner_size(1000.0, 720.0)
         .visible(show_window)
+        .initialization_script(&helper_script_init)
         .on_page_load(move |window, payload| {
             if payload.event() == PageLoadEvent::Finished {
                 let _ = window.eval(helper_script_onload.clone());
@@ -750,28 +913,56 @@ async fn quick_register(app: AppHandle, show_window: bool, state: State<'_, AppS
         code_js, password_js
     ));
 
-    let cookies = match wait_for_token_with_cookies(&webview, Duration::from_secs(90)).await {
-        Ok(cookies) => cookies,
-        Err(err) => {
-            let _ = webview.close();
-            if !show_window {
+    println!("[quick-register] Waiting for login completion (token interception)...");
+    let (token, url) = match token_rx.await {
+        Ok(res) => res,
+        Err(_) => {
+             println!("[quick-register] Token wait channel closed or timed out");
+             let _ = webview.close();
+             if !show_window {
                 emit_quick_register_notice(
                     &app,
                     "quick_register_failed",
                     "快速注册失败，可在设置中开启快速注册显示浏览器查看失败原因。",
                 );
             }
-            return Err(ApiError::from(err));
+             return Err(anyhow::anyhow!("等待 Token 超时或失败").into());
         }
     };
+    println!("[quick-register] Token intercepted successfully.");
+
+    let mut cookies = String::new();
+    if let Ok(parsed_url) = Url::parse(&url) {
+        if let Ok(cookie_list) = webview.cookies_for_url(parsed_url) {
+            let cookie_strings: Vec<String> = cookie_list
+                .into_iter()
+                .map(|c| format!("{}={}", c.name(), c.value()))
+                .collect();
+            cookies = cookie_strings.join("; ");
+            println!("[quick-register] Captured cookies for {}: {}", url, cookies);
+        }
+    }
+
+    if cookies.is_empty() {
+        // Fallback: if specific URL cookies are empty (unlikely if logged in), try strict collection
+        println!("[quick-register] Warning: No cookies found for specific URL, falling back to strict collection.");
+        cookies = collect_trae_cookies(&webview, Some(&url));
+    } else {
+        // Ensure IDC cookies are present if missing, as they are often critical for routing
+        if !cookies.contains("store-idc=") && !cookies.contains("trae-target-idc=") {
+             cookies.push_str("; store-idc=alisg");
+        }
+    }
 
     if !show_window {
         emit_quick_register_notice(&app, "quick_register_login_ok", "登录成功，正在导入账号");
     }
 
     let _ = webview.close();
+    println!("[quick-register] Adding account to manager...");
     let mut manager = state.account_manager.lock().await;
-    let mut account = manager.add_account(cookies, Some(password)).await.map_err(ApiError::from)?;
+    let mut account = manager.add_account_by_token(token, Some(cookies), Some(password)).await.map_err(ApiError::from)?;
+    println!("[quick-register] Account added, ID: {}", account.id);
     let needs_email_override = account.email.trim().is_empty()
         || account.email.contains('*')
         || !account.email.contains('@');
@@ -1196,14 +1387,27 @@ fn build_browser_login_script(port: u16) -> String {
     script.replace("__PORT__", &port.to_string())
 }
 
-fn collect_trae_cookies(webview: &WebviewWindow) -> String {
+fn collect_trae_cookies(webview: &WebviewWindow, extra_url: Option<&str>) -> String {
     let mut cookie_map: HashMap<String, String> = HashMap::new();
-    for raw_url in [
-        "https://www.trae.ai/",
-        "https://api-sg-central.trae.ai/",
-        "https://ug-normal.trae.ai/",
-    ] {
-        if let Ok(url) = Url::parse(raw_url) {
+    let mut urls = vec![
+        "https://www.trae.ai/".to_string(),
+        "https://api-sg-central.trae.ai/".to_string(),
+        "https://ug-normal.trae.ai/".to_string(),
+    ];
+    
+    if let Some(url) = extra_url {
+        if !url.is_empty() {
+             // 尝试提取 base url (e.g. https://api-us-east.trae.ai)
+             if let Ok(parsed) = Url::parse(url) {
+                 let base = format!("{}://{}/", parsed.scheme(), parsed.host_str().unwrap_or_default());
+                 urls.push(base);
+             }
+             urls.push(url.to_string());
+        }
+    }
+
+    for raw_url in urls {
+        if let Ok(url) = Url::parse(&raw_url) {
             if let Ok(cookies) = webview.cookies_for_url(url) {
                 for cookie in cookies {
                     cookie_map
@@ -1401,7 +1605,7 @@ async fn finish_browser_login(state: State<'_, AppState>) -> Result<Account> {
     }
     let _ = state.browser_login_cancel.lock().await.take();
 
-    let cookies = collect_trae_cookies(&session.webview);
+    let cookies = collect_trae_cookies(&session.webview, None);
     println!("[browser-login] cookies collected: {}", if cookies.is_empty() { "empty" } else { "ok" });
     let token = if token == "__LOGIN_DONE__" {
         if cookies.is_empty() {

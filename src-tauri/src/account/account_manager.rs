@@ -730,6 +730,7 @@ impl AccountManager {
                 "avatar_url": acc.avatar_url,
                 "jwt_token": acc.jwt_token,
                 "machine_id": acc.machine_id,
+                "password": acc.password,
             })
         }).collect();
 
@@ -742,40 +743,122 @@ impl AccountManager {
         let import_data: Vec<serde_json::Value> = serde_json::from_str(data)
             .map_err(|e| anyhow!("JSON 解析失败: {}", e))?;
 
-        let mut imported_count = 0;
+        // 1. Prepare tasks for fetching account info
+        let mut tasks = Vec::new();
+        // Limit concurrency to 5 to avoid rate limits
+        let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(5));
+        
+        // Pre-check for existing accounts by email to skip unnecessary requests
+        let existing_emails: std::collections::HashSet<String> = self.store.accounts.iter()
+            .map(|a| a.email.trim().to_lowercase())
+            .filter(|e| !e.is_empty())
+            .collect();
 
         for item in import_data {
             let cookies = item.get("cookies")
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
+            
+            let email = item.get("email")
+                .and_then(|v| v.as_str())
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty());
+
+            let password = item.get("password")
+                .and_then(|v| v.as_str())
+                .map(|v| v.to_string())
+                .filter(|v| !v.is_empty());
+                
+            let machine_id = item.get("machine_id")
+                .and_then(|v| v.as_str())
+                .map(|v| v.to_string())
+                .filter(|v| !v.is_empty());
 
             if cookies.is_empty() {
                 continue;
             }
-
-            // 尝试通过 cookies 添加账号
-            match self.add_account(cookies, None).await {
-                Ok(account) => {
-                    // 如果导入数据中有 machine_id，则更新
-                    if let Some(machine_id) = item.get("machine_id").and_then(|v| v.as_str()) {
-                         if !machine_id.is_empty() {
-                            if let Some(acc) = self.store.accounts.iter_mut().find(|a| a.id == account.id) {
-                                acc.machine_id = Some(machine_id.to_string());
-                                // 保存更新
-                                self.save_store()?;
-                            }
-                         }
-                    }
-                    imported_count += 1;
-                }
-                Err(e) => {
-                    // 如果是"账号已存在"错误，跳过
-                    if !e.to_string().contains("已存在") {
-                        println!("[WARN] 导入账号失败: {}", e);
+            
+            // If email is provided in import data and already exists, update directly without network request
+            if let Some(ref e) = email {
+                if existing_emails.contains(&e.to_lowercase()) {
+                    if let Some(existing) = self.store.accounts.iter_mut().find(|a| a.email.eq_ignore_ascii_case(e)) {
+                        // Update existing account locally
+                        if let Some(new_mid) = machine_id {
+                             if existing.machine_id != Some(new_mid.clone()) {
+                                 existing.machine_id = Some(new_mid);
+                             }
+                        }
+                        if let Some(new_pass) = password {
+                             if existing.password != Some(new_pass.clone()) {
+                                 existing.password = Some(new_pass);
+                             }
+                        }
+                        // Always update cookies for existing account
+                        existing.cookies = cookies;
+                        self.save_store()?;
+                        continue;
                     }
                 }
             }
+            
+            let cookies_clone = cookies.clone();
+            let semaphore_clone = semaphore.clone();
+            
+            tasks.push(tokio::spawn(async move {
+                let _permit = semaphore_clone.acquire().await.unwrap();
+                // Perform network requests
+                let result = fetch_account_info_internal(cookies_clone, password).await;
+                (result, machine_id)
+            }));
+        }
+
+        // 2. Wait for all tasks to complete
+        let mut new_accounts = Vec::new();
+        for task in tasks {
+            if let Ok((Ok(mut account), machine_id)) = task.await {
+                if let Some(mid) = machine_id {
+                    account.machine_id = Some(mid);
+                }
+                new_accounts.push(account);
+            }
+        }
+
+        // 3. Update store
+        let mut imported_count = 0;
+        let mut changed = false;
+        
+        for account in new_accounts {
+             if let Some(existing) = self.store.accounts.iter_mut().find(|a| a.user_id == account.user_id) {
+                 // Update existing account's machine_id if new one is provided
+                 if let Some(new_mid) = account.machine_id {
+                     if existing.machine_id != Some(new_mid.clone()) {
+                         existing.machine_id = Some(new_mid);
+                         changed = true;
+                     }
+                 }
+                 // Update password if provided
+                 if let Some(new_pass) = account.password {
+                     if existing.password != Some(new_pass.clone()) {
+                         existing.password = Some(new_pass);
+                         changed = true;
+                     }
+                 }
+                 continue;
+             }
+             
+             self.store.accounts.push(account);
+             imported_count += 1;
+             changed = true;
+        }
+
+        if self.store.active_account_id.is_none() && !self.store.accounts.is_empty() {
+            self.store.active_account_id = Some(self.store.accounts[0].id.clone());
+            changed = true;
+        }
+
+        if changed {
+            self.save_store()?;
         }
 
         Ok(imported_count)
@@ -1034,4 +1117,25 @@ impl AccountManager {
         }
         Ok(())
     }
+}
+
+async fn fetch_account_info_internal(cookies: String, password: Option<String>) -> Result<Account> {
+    let mut client = TraeApiClient::new(&cookies)?;
+    let token_result = client.get_user_token().await?;
+    let user_info = client.get_user_info().await?;
+    
+    let mut account = Account::new(
+        user_info.screen_name.clone(),
+        user_info.non_plain_text_email.unwrap_or_default(),
+        cookies,
+        token_result.user_id,
+        token_result.tenant_id,
+    );
+    account.avatar_url = user_info.avatar_url;
+    account.region = user_info.region;
+    account.jwt_token = Some(token_result.token);
+    account.token_expired_at = Some(token_result.expired_at);
+    account.password = password;
+    
+    Ok(account)
 }

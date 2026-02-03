@@ -4811,7 +4811,7 @@ dependencies = [
 
 [[package]]
 name = "trae-account-manager"
-version = "2.0.2"
+version = "2.1.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",

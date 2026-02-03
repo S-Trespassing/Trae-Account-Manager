@@ -99,6 +99,8 @@ impl TraeApiClient {
             API_BASE_US.to_string()
         } else if cookies.contains("store-idc=alisg") || cookies.contains("trae-target-idc=alisg") {
             API_BASE_SG.to_string()
+        } else if cookies.contains("store-country-code=us") {
+            API_BASE_US.to_string()
         } else {
             // 默认使用新加坡
             API_BASE_SG.to_string()
@@ -302,21 +304,63 @@ impl TraeApiClient {
 
     /// 获取用户 Token
     pub async fn get_user_token(&mut self) -> Result<UserTokenResult> {
+        // Force API_BASE_SG for token retrieval if US base fails
+        // Or detect if we should use SG based on cookies even if it says US
         let url = format!("{}/cloudide/api/v3/common/GetUserToken", self.api_base);
-        let headers = self.build_headers(false)?;
+        
+        let mut headers = header::HeaderMap::new();
+        headers.insert(header::USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36".parse()?);
+        headers.insert(header::CONTENT_TYPE, "application/json".parse()?);
+        headers.insert(header::ACCEPT, "application/json, text/plain, */*".parse()?);
+        // Important: Some endpoints require Origin/Referer to match the base domain
+        headers.insert(header::ORIGIN, "https://www.trae.ai".parse()?);
+        headers.insert(header::REFERER, "https://www.trae.ai/".parse()?);
+        
+        if !self.cookies.trim().is_empty() {
+            let cookie_value = header::HeaderValue::from_bytes(self.cookies.as_bytes())
+                .map_err(|e| anyhow!("Cookie 格式错误: {}", e))?;
+            headers.insert(header::COOKIE, cookie_value);
+        }
+
+        println!("[DEBUG] get_user_token request url: {}", url);
+        println!("[DEBUG] get_user_token request headers: {:?}", headers);
 
         let response = self
             .client
             .post(&url)
-            .headers(headers)
+            .headers(headers.clone()) // Clone for retry if needed
             .send()
             .await?;
 
-        if !response.status().is_success() {
-            return Err(anyhow!("获取 Token 失败: {}", response.status()));
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        
+        if !status.is_success() {
+             println!("[DEBUG] get_user_token failed response body: {}", body);
+             
+             // Retry with SG endpoint if US endpoint failed with 401
+             if (status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN) 
+                && self.api_base == API_BASE_US {
+                 println!("[DEBUG] Retrying with SG endpoint...");
+                 let url_sg = format!("{}/cloudide/api/v3/common/GetUserToken", API_BASE_SG);
+                 let response_sg = self.client.post(&url_sg).headers(headers).send().await?;
+                 
+                 if response_sg.status().is_success() {
+                     let data: GetUserTokenResponse = response_sg.json().await?;
+                     self.jwt_token = Some(data.result.token.clone());
+                     // Update api_base to SG since it worked
+                     self.api_base = API_BASE_SG.to_string();
+                     return Ok(data.result);
+                 } else {
+                     let body_sg = response_sg.text().await.unwrap_or_default();
+                     println!("[DEBUG] SG retry failed response body: {}", body_sg);
+                 }
+             }
+
+            return Err(anyhow!("获取 Token 失败: {} - {}", status, body));
         }
 
-        let data: GetUserTokenResponse = response.json().await?;
+        let data: GetUserTokenResponse = serde_json::from_str(&body)?;
         self.jwt_token = Some(data.result.token.clone());
         Ok(data.result)
     }
@@ -433,6 +477,12 @@ impl TraeApiClient {
                     let response_text = resp.text().await?;
                     println!("[DEBUG] API Response from {}: {}", base, response_text);
 
+                    // 检查响应内容是否包含 entitlement 数据
+                    if !response_text.contains("user_entitlement_pack_list") {
+                        println!("[DEBUG] Response missing entitlement data, skipping...");
+                        continue;
+                    }
+
                     match serde_json::from_str::<EntitlementListResponse>(&response_text) {
                         Ok(entitlements) => {
                             let summary = Self::parse_entitlements_to_summary(entitlements)?;
@@ -441,12 +491,14 @@ impl TraeApiClient {
                             return Ok(summary);
                         }
                         Err(e) => {
+                            println!("[DEBUG] Failed to parse response: {}", e);
                             last_error = anyhow!("解析响应失败: {}", e);
                         }
                     }
                 }
                 Ok(resp) => {
                     println!("[DEBUG] API {} returned error: {}", base, resp.status());
+                    // 404 或 403 可能意味着该区域不可用，继续尝试其他区域
                     last_error = anyhow!("API 返回错误: {}", resp.status());
                 }
                 Err(e) => {
@@ -694,8 +746,15 @@ pub async fn login_with_email(email: &str, password: &str) -> Result<EmailLoginR
         return Err(anyhow!("Trae 登录失败: {}", trae_login_response.status()));
     }
 
+    // Detect API base from cookies
+    let check_url = Url::parse("https://www.trae.ai")?;
+    let cookies_str = cookie_jar.cookies(&check_url)
+        .map(|v| v.to_str().unwrap_or_default().to_string())
+        .unwrap_or_default();
+    let api_base = TraeApiClient::detect_api_base_from_cookies(&cookies_str);
+
     // Step 5: 获取用户 Token
-    let token_url = format!("{}/cloudide/api/v3/common/GetUserToken", API_BASE_SG);
+    let token_url = format!("{}/cloudide/api/v3/common/GetUserToken", api_base);
 
     let token_response = client
         .post(&token_url)

@@ -1,6 +1,6 @@
 [package]
 name = "trae-account-manager"
-version = "2.0.2"
+version = "2.1.0"
 description = "Trae Account Manager - 管理 Trae 订阅账号使用量"
 authors = ["sauce"]
 edition = "2021"
