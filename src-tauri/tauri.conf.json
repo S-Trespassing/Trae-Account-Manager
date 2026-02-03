@@ -4,9 +4,9 @@
   "version": "2.0.2",
   "identifier": "com.sauce.trae-auto",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "pnpm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "pnpm run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -24,6 +24,9 @@
     }
   },
   "bundle": {
+    "macOS": {
+      "minimumSystemVersion": "12.0"
+    },
     "active": true,
     "targets": "all",
     "icon": [
