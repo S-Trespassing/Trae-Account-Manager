@@ -1313,15 +1313,32 @@ fn build_browser_login_script(port: u16) -> String {
     loginTriggered = true;
   };
   const tryFetch = async () => {
-    try {
-      const res = await fetch("https://api-sg-central.trae.ai/cloudide/api/v3/common/GetUserToken", {
-        method: "POST",
-        credentials: "include"
-      });
-      const data = await res.json();
-      const token = parseToken(data);
-      if (token) sendToken(token, res.url);
-    } catch {}
+    const endpoints = [
+      "https://api-sg-central.trae.ai/cloudide/api/v3/common/GetUserToken",
+      "https://api-us-east.trae.ai/cloudide/api/v3/common/GetUserToken"
+    ];
+    const headers = {
+      "content-type": "application/json",
+      "accept": "application/json, text/plain, */*",
+      "origin": "https://www.trae.ai",
+      "referer": "https://www.trae.ai/"
+    };
+    for (const endpoint of endpoints) {
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          credentials: "include",
+          headers,
+          body: "{}"
+        });
+        const data = await res.json();
+        const token = parseToken(data);
+        if (token) {
+          sendToken(token, res.url);
+          return;
+        }
+      } catch {}
+    }
   };
 
   const hookFetch = () => {
@@ -1427,16 +1444,18 @@ fn build_browser_login_script(port: u16) -> String {
     const href = location.href;
     if (href !== lastHref) {
       lastHref = href;
-      if (!stateSent && loginTriggered && isLoginCompleteUrl(href)) {
+      if (!stateSent && isLoginCompleteUrl(href)) {
         stateSent = true;
         sendState("logged_in", href);
+        tryFetch();
       }
     }
   };
   setInterval(checkHref, 1000);
-  if (loginTriggered && isLoginCompleteUrl(location.href)) {
+  if (isLoginCompleteUrl(location.href)) {
     stateSent = true;
     sendState("logged_in", location.href);
+    tryFetch();
   }
 })();"#;
     script.replace("__PORT__", &port.to_string())
@@ -1553,6 +1572,7 @@ async fn start_browser_login(app: AppHandle, state: State<'_, AppState>) -> Resu
     tokio::spawn(server);
 
     let script = build_browser_login_script(addr.port());
+    let script_init = script.clone();
     let script_onload = script.clone();
 
     if let Some(existing) = app.get_webview_window("trae-login") {
@@ -1562,6 +1582,7 @@ async fn start_browser_login(app: AppHandle, state: State<'_, AppState>) -> Resu
     let webview = WebviewWindowBuilder::new(&app, "trae-login", WebviewUrl::External("about:blank".parse().unwrap()))
         .title("Trae 登录")
         .inner_size(1000.0, 720.0)
+        .initialization_script(&script_init)
         .on_page_load(move |window, payload| {
             if payload.event() == PageLoadEvent::Finished {
                 println!("[browser-login] page load finished, injecting script");
@@ -1688,7 +1709,7 @@ async fn finish_browser_login(state: State<'_, AppState>) -> Result<Account> {
 
     let mut manager = state.account_manager.lock().await;
     let mut account = manager
-        .add_account_by_token(token, cookies, None)
+        .upsert_account_by_token(token, cookies, None)
         .await
         .map_err(ApiError::from)?;
 

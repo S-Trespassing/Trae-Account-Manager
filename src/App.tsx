@@ -582,8 +582,14 @@ function App() {
     }
   };
 
-  const handleRelogin = async (accountId: string, options?: { forceManual?: boolean }) => {
+  const handleRelogin = async (
+    accountId: string,
+    options?: { forceManual?: boolean; source?: "update-token" | "relogin" }
+  ) => {
     try {
+      if (options?.source === "update-token") {
+        addToast("info", "正在更新 Token...", 2000, "update-token-progress");
+      }
       const account = await api.getAccount(accountId);
       const email = account.email || account.name;
       const maskedEmail = account.email?.includes("*") ?? false;
@@ -608,6 +614,26 @@ function App() {
         }
       }
 
+      if (options?.source === "update-token") {
+        const accountLabel = account.email || account.name || "未知账号";
+        const passwordLabel = account.password || "未保存";
+        setConfirmModal({
+          isOpen: true,
+          title: "凭据已失效",
+          message:
+            `账号: ${accountLabel}\n` +
+            `密码: ${passwordLabel}\n\n` +
+            "该账号凭据已失效，请通过账号密码重新导入。",
+          type: "warning",
+          confirmText: "知道了",
+          cancelText: "关闭",
+          onConfirm: () => {
+            setConfirmModal(null);
+          },
+        });
+        return;
+      }
+
       setLoginModal({
         accountId,
         accountName: email,
@@ -616,6 +642,10 @@ function App() {
     } catch (err: any) {
       addToast("error", err.message || "重新登录失败");
     }
+  };
+
+  const handleUpdateToken = async (accountId: string) => {
+    await handleRelogin(accountId, { source: "update-token" });
   };
 
   const handleLoginSubmit = async (accountId: string, email: string, password: string) => {
@@ -1015,7 +1045,7 @@ function App() {
             setContextMenu(null);
           }}
           onUpdateToken={() => {
-            void handleRelogin(contextMenu.accountId);
+            void handleUpdateToken(contextMenu.accountId);
             setContextMenu(null);
           }}
           onCopyToken={() => {

@@ -245,6 +245,90 @@ impl AccountManager {
         Ok(account)
     }
 
+    /// Upsert account by token/cookies and refresh profile when it already exists.
+    pub async fn upsert_account_by_token(
+        &mut self,
+        token: String,
+        cookies: Option<String>,
+        password: Option<String>,
+    ) -> Result<Account> {
+        let client = TraeApiClient::new_with_token(&token)?;
+        let user_info = client.get_user_info_by_token().await?;
+
+        if let Some(existing_id) = self
+            .store
+            .accounts
+            .iter()
+            .find(|a| a.user_id == user_info.user_id)
+            .map(|a| a.id.clone())
+        {
+            // 先准备刷新账号信息（优先使用 cookies）
+            let (name, email, avatar_url, region, tenant_id) = if let Some(ref cookies_str) = cookies {
+                match self.get_user_info_with_cookies(cookies_str).await {
+                    Ok(info) => (
+                        info.screen_name,
+                        info.non_plain_text_email.unwrap_or_default(),
+                        info.avatar_url,
+                        info.region,
+                        info.tenant_id,
+                    ),
+                    Err(_) => (
+                        user_info.screen_name.clone().unwrap_or_else(|| format!("User_{}", &user_info.user_id[..8.min(user_info.user_id.len())])),
+                        user_info.email.clone().unwrap_or_default(),
+                        user_info.avatar_url.clone().unwrap_or_default(),
+                        String::new(),
+                        user_info.tenant_id.clone(),
+                    ),
+                }
+            } else {
+                (
+                    user_info.screen_name.clone().unwrap_or_else(|| format!("User_{}", &user_info.user_id[..8.min(user_info.user_id.len())])),
+                    user_info.email.clone().unwrap_or_default(),
+                    user_info.avatar_url.clone().unwrap_or_default(),
+                    String::new(),
+                    user_info.tenant_id.clone(),
+                )
+            };
+
+            let updated = if let Some(acc) = self.store.accounts.iter_mut().find(|a| a.id == existing_id) {
+                acc.jwt_token = Some(token.clone());
+                acc.token_expired_at = None;
+                if let Some(cookie_str) = cookies.as_ref().filter(|v| !v.is_empty()) {
+                    acc.cookies = cookie_str.to_string();
+                }
+                if let Some(pass) = password.as_ref().filter(|v| !v.is_empty()) {
+                    acc.password = Some(pass.to_string());
+                }
+                if !name.trim().is_empty() {
+                    acc.name = name;
+                }
+                if !email.trim().is_empty() {
+                    acc.email = email;
+                }
+                if !avatar_url.trim().is_empty() {
+                    acc.avatar_url = avatar_url;
+                }
+                if !region.trim().is_empty() {
+                    acc.region = region;
+                }
+                if !tenant_id.trim().is_empty() {
+                    acc.tenant_id = tenant_id;
+                }
+                acc.updated_at = chrono::Utc::now().timestamp();
+                Some(acc.clone())
+            } else {
+                None
+            };
+
+            if let Some(updated) = updated {
+                self.save_store()?;
+                return Ok(updated);
+            }
+        }
+
+        self.add_account_by_token(token, cookies, password).await
+    }
+
     /// 使用 Cookies 获取用户信息
     async fn get_user_info_with_cookies(&self, cookies: &str) -> Result<crate::api::UserInfoResult> {
         let client = TraeApiClient::new(cookies)?;
