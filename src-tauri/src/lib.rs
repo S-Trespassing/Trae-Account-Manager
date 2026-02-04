@@ -85,7 +85,7 @@ pub struct AppState {
 }
 
 struct BrowserLoginSession {
-    receiver: oneshot::Receiver<String>,
+    receiver: oneshot::Receiver<(String, String)>,
     shutdown: Arc<StdMutex<Option<oneshot::Sender<()>>>>,
     cancel: oneshot::Receiver<()>,
     window_close: oneshot::Receiver<()>,
@@ -435,10 +435,19 @@ fn build_register_helper_script(port: u16) -> String {
     );
   };
 
+  const normalizeUrl = (raw) => {
+    if (!raw) return "";
+    try {
+      return new URL(raw, location.href).toString();
+    } catch {
+      return String(raw);
+    }
+  };
+
   const sendToken = (token, url) => {
     if (!token) return;
     sendLog("Found token: " + token.substring(0, 10) + "...");
-    sendPayload({ token, url: url || "" });
+    sendPayload({ token, url: normalizeUrl(url) });
   };
 
   const hookFetch = () => {
@@ -788,6 +797,47 @@ async fn wait_for_token_with_cookies(webview: &WebviewWindow, timeout: Duration)
     Err(anyhow::anyhow!("注册完成后未能获取 Token"))
 }
 
+fn normalize_request_url(raw: &str) -> Option<Url> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Ok(url) = Url::parse(trimmed) {
+        return Some(url);
+    }
+    if trimmed.starts_with("//") {
+        return Url::parse(&format!("https:{}", trimmed)).ok();
+    }
+    if !trimmed.starts_with('/') && trimmed.contains('.') {
+        return Url::parse(&format!("https://{}", trimmed)).ok();
+    }
+    Url::parse("https://www.trae.ai/").ok()?.join(trimmed).ok()
+}
+
+async fn wait_for_request_cookies(
+    webview: &WebviewWindow,
+    request_url: &str,
+    timeout: Duration,
+) -> anyhow::Result<String> {
+    let parsed_url = normalize_request_url(request_url)
+        .ok_or_else(|| anyhow::anyhow!("GetUserToken URL 无效: {}", request_url))?;
+    let start = Instant::now();
+    while start.elapsed() < timeout {
+        if let Ok(cookie_list) = webview.cookies_for_url(parsed_url.clone()) {
+            let cookies = cookie_list
+                .into_iter()
+                .map(|c| format!("{}={}", c.name(), c.value()))
+                .collect::<Vec<_>>()
+                .join("; ");
+            if !cookies.is_empty() {
+                return Ok(cookies);
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(300)).await;
+    }
+    Err(anyhow::anyhow!("未能获取 GetUserToken 请求 Cookie"))
+}
+
 #[tauri::command]
 async fn quick_register(app: AppHandle, show_window: bool, state: State<'_, AppState>) -> Result<Account> {
     if state.browser_login.lock().await.is_some() {
@@ -930,29 +980,25 @@ async fn quick_register(app: AppHandle, show_window: bool, state: State<'_, AppS
         }
     };
     println!("[quick-register] Token intercepted successfully.");
-
-    let mut cookies = String::new();
-    if let Ok(parsed_url) = Url::parse(&url) {
-        if let Ok(cookie_list) = webview.cookies_for_url(parsed_url) {
-            let cookie_strings: Vec<String> = cookie_list
-                .into_iter()
-                .map(|c| format!("{}={}", c.name(), c.value()))
-                .collect();
-            cookies = cookie_strings.join("; ");
+    let cookies = match wait_for_request_cookies(&webview, &url, Duration::from_secs(6)).await {
+        Ok(cookies) => {
             println!("[quick-register] Captured cookies for {}: {}", url, cookies);
+            println!("[quick-register] Using strictly captured cookies from URL: {}", url);
+            cookies
         }
-    }
-
-    if cookies.is_empty() {
-        // Fallback: if specific URL cookies are empty (unlikely if logged in), try strict collection
-        println!("[quick-register] Warning: No cookies found for specific URL, falling back to strict collection.");
-        cookies = collect_trae_cookies(&webview, Some(&url));
-    } else {
-        // Ensure IDC cookies are present if missing, as they are often critical for routing
-        if !cookies.contains("store-idc=") && !cookies.contains("trae-target-idc=") {
-             cookies.push_str("; store-idc=alisg");
+        Err(err) => {
+            println!("[quick-register] Failed to capture GetUserToken cookies: {}", err);
+            let _ = webview.close();
+            if !show_window {
+                emit_quick_register_notice(
+                    &app,
+                    "quick_register_failed",
+                    "获取登录 Cookie 失败，请重试。",
+                );
+            }
+            return Err(ApiError::from(err));
         }
-    }
+    };
 
     if !show_window {
         emit_quick_register_notice(&app, "quick_register_login_ok", "登录成功，正在导入账号");
@@ -1224,10 +1270,19 @@ fn build_browser_login_script(port: u16) -> String {
     lastSentPassword = capturedPassword;
     sendPayload({ state: "credentials" });
   };
-  const sendToken = (token) => {
+  const normalizeUrl = (raw) => {
+    if (!raw) return "";
+    try {
+      return new URL(raw, location.href).toString();
+    } catch {
+      return String(raw);
+    }
+  };
+
+  const sendToken = (token, url) => {
     if (!token) return;
     loginTriggered = true;
-    sendPayload({ token });
+    sendPayload({ token, url: normalizeUrl(url) });
   };
   const sendState = (state, href) => {
     if (!state) return;
@@ -1265,7 +1320,7 @@ fn build_browser_login_script(port: u16) -> String {
       });
       const data = await res.json();
       const token = parseToken(data);
-      if (token) sendToken(token);
+      if (token) sendToken(token, res.url);
     } catch {}
   };
 
@@ -1286,7 +1341,7 @@ fn build_browser_login_script(port: u16) -> String {
         if (typeof res.url === "string" && res.url.includes("GetUserToken")) {
           const data = await res.clone().json();
           const token = parseToken(data);
-          if (token) sendToken(token);
+          if (token) sendToken(token, res.url);
         }
       } catch {}
       return res;
@@ -1309,7 +1364,7 @@ fn build_browser_login_script(port: u16) -> String {
           if ((this.__trae_url || "").includes("GetUserToken")) {
             const data = JSON.parse(this.responseText);
             const token = parseToken(data);
-            if (token) sendToken(token);
+            if (token) sendToken(token, this.__trae_url);
           }
         } catch {}
       });
@@ -1439,7 +1494,7 @@ async fn start_browser_login(app: AppHandle, state: State<'_, AppState>) -> Resu
     }
     println!("[browser-login] start_browser_login: launching login window");
 
-    let (token_tx, token_rx) = oneshot::channel::<String>();
+    let (token_tx, token_rx) = oneshot::channel::<(String, String)>();
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     let (cancel_tx, cancel_rx) = oneshot::channel::<()>();
     let (window_close_tx, window_close_rx) = oneshot::channel::<()>();
@@ -1462,6 +1517,7 @@ async fn start_browser_login(app: AppHandle, state: State<'_, AppState>) -> Resu
             let token = query.get("token").cloned().unwrap_or_default();
             let state = query.get("state").cloned().unwrap_or_default();
             let href = query.get("href").cloned().unwrap_or_default();
+            let url = query.get("url").cloned().unwrap_or_default();
             let email = query.get("email").cloned().unwrap_or_default();
             let password = query.get("password").cloned().unwrap_or_default();
 
@@ -1476,20 +1532,14 @@ async fn start_browser_login(app: AppHandle, state: State<'_, AppState>) -> Resu
             }
             if !token.is_empty() {
                 if let Some(tx) = token_sender_route.lock().unwrap().take() {
-                    let _ = tx.send(token);
+                    let _ = tx.send((token, url));
                 }
                 if let Some(tx) = shutdown_sender_route.lock().unwrap().take() {
                     let _ = tx.send(());
                 }
                 warp::reply::html("已收到 Token，可以关闭此页面并返回应用。".to_string())
             } else if state == "logged_in" {
-                if let Some(tx) = token_sender_route.lock().unwrap().take() {
-                    let _ = tx.send("__LOGIN_DONE__".to_string());
-                }
-                if let Some(tx) = shutdown_sender_route.lock().unwrap().take() {
-                    let _ = tx.send(());
-                }
-                warp::reply::html(format!("检测到登录完成，可返回应用继续导入。{href}"))
+                warp::reply::html(format!("检测到登录完成，等待获取 Token。{href}"))
             } else {
                 warp::reply::html("未收到 Token，请重试。".to_string())
             }
@@ -1561,7 +1611,7 @@ async fn finish_browser_login(state: State<'_, AppState>) -> Result<Account> {
         browser_login.take().ok_or_else(|| anyhow::anyhow!("浏览器登录未开始"))?
     };
 
-    let token = tokio::select! {
+    let (token, url) = tokio::select! {
         res = session.receiver => {
             match res {
                 Ok(token) => token,
@@ -1605,19 +1655,15 @@ async fn finish_browser_login(state: State<'_, AppState>) -> Result<Account> {
     }
     let _ = state.browser_login_cancel.lock().await.take();
 
-    let cookies = collect_trae_cookies(&session.webview, None);
-    println!("[browser-login] cookies collected: {}", if cookies.is_empty() { "empty" } else { "ok" });
-    let token = if token == "__LOGIN_DONE__" {
-        if cookies.is_empty() {
-            let _ = session.webview.close();
-            return Err(anyhow::anyhow!("登录完成但未获取到 Cookie").into());
+    let cookies = match wait_for_request_cookies(&session.webview, &url, Duration::from_secs(6)).await {
+        Ok(cookies) => {
+            println!("[browser-login] captured cookies for {}: {}", url, cookies);
+            cookies
         }
-        println!("[browser-login] token not provided, requesting token via cookies");
-        let mut client = TraeApiClient::new(&cookies).map_err(ApiError::from)?;
-        let token_result = client.get_user_token().await.map_err(ApiError::from)?;
-        token_result.token
-    } else {
-        token
+        Err(err) => {
+            let _ = session.webview.close();
+            return Err(ApiError::from(err));
+        }
     };
 
     let mut credentials = session.credentials.lock().unwrap().clone();
